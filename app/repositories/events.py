@@ -1,0 +1,102 @@
+"""events 테이블: 수신 API 가 1건당 1행을 넣고, 워커가 꺼내 처리한다.
+
+status 흐름
+  pending → processing → kept       (쓸모 있음, 다음 단계 대상)
+                       → discarded  (쓸모 없음, 종료)
+                       → pending    (실패 후 재시도 대기)
+                       → failed     (재시도 횟수 초과)
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+from contextlib import closing
+from datetime import datetime, timedelta, timezone
+
+from app.db.session import connect
+
+
+def now(offset_seconds: float = 0) -> str:
+    t = datetime.now(timezone.utc) + timedelta(seconds=offset_seconds)
+    return t.isoformat(timespec="seconds")
+
+
+def insert_event(source: str, dedup_key: str, payload: dict, raw_path: str | None = None,
+                 delay: float = 0) -> tuple[int, bool]:
+    """새 이벤트면 (id, True), 이미 받은 것이면 (기존 id, False)."""
+    ts = now()
+    with closing(connect()) as conn:
+        row = conn.execute(
+            "INSERT INTO events (source, dedup_key, payload, raw_path, available_at, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dedup_key) DO NOTHING RETURNING id",
+            (source, dedup_key, json.dumps(payload, ensure_ascii=False), raw_path, now(delay), ts, ts),
+        ).fetchone()
+        if row:
+            return row["id"], True
+        return _find_id(conn, dedup_key), False
+
+
+def find_event_id(dedup_key: str) -> int | None:
+    with closing(connect()) as conn:
+        return _find_id(conn, dedup_key)
+
+
+def find_event(dedup_key: str) -> sqlite3.Row | None:
+    with closing(connect()) as conn:
+        return conn.execute("SELECT * FROM events WHERE dedup_key = ?", (dedup_key,)).fetchone()
+
+
+def _find_id(conn: sqlite3.Connection, dedup_key: str) -> int | None:
+    row = conn.execute("SELECT id FROM events WHERE dedup_key = ?", (dedup_key,)).fetchone()
+    return row["id"] if row else None
+
+
+def postpone(event_id: int, delay: float) -> None:
+    """아직 처리 전이면 처리 시점을 뒤로 민다 (MMS 첨부 도착 시)."""
+    with closing(connect()) as conn:
+        conn.execute(
+            "UPDATE events SET available_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'",
+            (now(delay), now(), event_id),
+        )
+
+
+def claim_next() -> sqlite3.Row | None:
+    with closing(connect()) as conn:
+        return conn.execute(
+            "UPDATE events SET status = 'processing', attempts = attempts + 1, updated_at = ?"
+            " WHERE id = (SELECT id FROM events WHERE status = 'pending' AND available_at <= ?"
+            "             ORDER BY available_at, id LIMIT 1)"
+            " RETURNING *",
+            (now(), now()),
+        ).fetchone()
+
+
+def finish(event_id: int, status: str, verdict: dict | None = None, error: str | None = None) -> None:
+    with closing(connect()) as conn:
+        conn.execute(
+            "UPDATE events SET status = ?, verdict = ?, error = ?, updated_at = ? WHERE id = ?",
+            (status, json.dumps(verdict, ensure_ascii=False) if verdict is not None else None,
+             error, now(), event_id),
+        )
+
+
+def retry_later(event_id: int, error: str, delay: float) -> None:
+    with closing(connect()) as conn:
+        conn.execute(
+            "UPDATE events SET status = 'pending', error = ?, available_at = ?, updated_at = ? WHERE id = ?",
+            (error, now(delay), now(), event_id),
+        )
+
+
+def reset_stale() -> int:
+    """워커가 처리 도중 죽었을 때 남은 processing 을 되돌린다. 워커는 1개만 뜬다는 전제."""
+    with closing(connect()) as conn:
+        return conn.execute(
+            "UPDATE events SET status = 'pending', updated_at = ? WHERE status = 'processing'", (now(),)
+        ).rowcount
+
+
+def status_counts() -> dict[str, int]:
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT status, COUNT(*) AS n FROM events GROUP BY status").fetchall()
+        return {r["status"]: r["n"] for r in rows}
