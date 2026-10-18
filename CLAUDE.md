@@ -14,12 +14,14 @@ API, 저장 경로, 실행 방법은 README.md에 정리돼 있다.
 
 ## 운영 환경 (VPS)
 
-- 코드 `/root/auto_mobile`, 설정 `/root/auto_mobile/.env`(git 제외, 600), 데이터 `/root/auto_mobile/data/`
+- 코드 `/home/automan/auto_mobile`, 설정 `/home/automan/auto_mobile/.env`(git 제외, 600), 데이터 `/home/automan/auto_mobile/data/`
 - systemd 서비스
   - `auto-mobile-api`: uvicorn, `127.0.0.1:8080`에서만 받는다
   - `auto-mobile-worker`: 판별 워커. 반드시 1개만 띄운다
   - `caddy`: HTTPS 종단. Let's Encrypt 인증서를 자동으로 발급하고 갱신한다. 설정은 `/etc/caddy/Caddyfile`
-- 배포: `git pull && uv sync --frozen && systemctl restart auto-mobile-api auto-mobile-worker`
+- `automan` 계정으로 운영한다. 서비스도 `User=automan`으로 돈다. root에서는 `claude --dangerously-skip-permissions`를 쓸 수 없어서 일반 계정으로 옮겼다.
+- automan은 `sudo -n systemctl start|stop|restart auto-mobile-api|auto-mobile-worker`, `sudo -n systemctl reload|restart caddy`만 비밀번호 없이 쓸 수 있다(`/etc/sudoers.d/automan`). 그 밖의 root 작업(Caddyfile·systemd unit 수정, apt 등)은 사용자에게 요청한다.
+- 배포: `git pull && uv sync --frozen && sudo -n systemctl restart auto-mobile-api auto-mobile-worker`
 - `.env`의 `INGEST_TOKEN`은 폰 Automate 블록 헤더에 같은 값이 들어 있다. 바꾸면 폰도 함께 바꿔야 한다(아래 참고).
 - 저장소가 public이다. 토큰, 실제 전화번호, 이름, 문자 내용을 커밋하지 않는다. 테스트 데이터는 `01012345678`, `홍길동` 같은 가짜 값을 쓴다.
 
