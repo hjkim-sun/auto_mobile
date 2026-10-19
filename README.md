@@ -7,6 +7,8 @@
 워커 (app/jobs/worker.py)  ──▶  pending 이벤트를 하나씩 꺼내 kept / discarded 판별
 ```
 
+흐름 상세: [docs/pipeline.md](docs/pipeline.md) (시퀀스 다이어그램)
+
 ## 실행
 
 ```bash
