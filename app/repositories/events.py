@@ -100,3 +100,17 @@ def status_counts() -> dict[str, int]:
     with closing(connect()) as conn:
         rows = conn.execute("SELECT status, COUNT(*) AS n FROM events GROUP BY status").fetchall()
         return {r["status"]: r["n"] for r in rows}
+
+
+def list_events(source: str, status: str | None = None, limit: int = 50,
+                before_id: int | None = None) -> list[sqlite3.Row]:
+    """최신순. before_id 로 다음 페이지를 이어 받는다."""
+    sql, args = "SELECT * FROM events WHERE source = ?", [source]
+    if status:
+        sql += " AND status = ?"
+        args.append(status)
+    if before_id:
+        sql += " AND id < ?"
+        args.append(before_id)
+    with closing(connect()) as conn:
+        return conn.execute(sql + " ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()

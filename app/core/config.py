@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = Field(default=3.0, gt=0)
     worker_max_attempts: int = Field(default=5, ge=1)
 
+    # 음성 전사 (faster-whisper). 모델은 CTranslate2 변환본 디렉토리를 미리 받아 둔다.
+    whisper_model_dir: Path = Path.home() / "whisper" / "large-v3-turbo"
+    whisper_compute_type: str = "int8"
+    whisper_cpu_threads: int = Field(default=2, ge=1)
+    whisper_language: str = "ko"
+
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"

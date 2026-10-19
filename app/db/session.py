@@ -21,6 +21,19 @@ CREATE TABLE IF NOT EXISTS events (
     updated_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_queue ON events (status, available_at);
+
+CREATE TABLE IF NOT EXISTS transcriptions (
+    id           INTEGER PRIMARY KEY,
+    input_path   TEXT NOT NULL,            -- data_dir 기준 음성 파일 경로
+    output_dir   TEXT NOT NULL,            -- data_dir 기준 결과 디렉토리
+    language     TEXT,                     -- NULL 이면 자동 감지
+    status       TEXT NOT NULL DEFAULT 'queued',  -- queued | running | done | failed
+    text_path    TEXT,                     -- data_dir 기준 결과 .txt
+    duration     REAL,                     -- 음성 길이(초)
+    error        TEXT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
 """
 
 
