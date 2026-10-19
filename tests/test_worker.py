@@ -33,8 +33,9 @@ def rows():
 def fake_jev(monkeypatch):
     states = []
 
-    def classify(state):
+    def classify(state, questions):
         states.append(state)
+        assert "relevance" in questions
         return jev_answer(0.0 if "광고" in state else 0.9)
 
     monkeypatch.setattr(jev, "classify", classify)
@@ -56,7 +57,7 @@ def test_worker_keeps_useful_and_discards_noise(client, fake_jev):
     assert len(fake_jev) == 2
 
 
-def fail(state):
+def fail(state, questions):
     raise httpx.ConnectError("down")
 
 
@@ -79,3 +80,64 @@ def test_worker_marks_failed_after_max_attempts(client, monkeypatch):
     run(once=True)
 
     assert rows()["message:sms-2"]["status"] == "failed"
+
+
+def write_prompt(name, body):
+    path = get_settings().prompts_dir / f"{name}.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+CUSTOM = """
+keep_question = "keep"
+keep_choice = "yes"
+threshold = 0.95
+
+[questions.keep]
+type = "choice"
+instructions = "남길까?"
+criteria = { yes = "남긴다", no = "버린다" }
+"""
+
+
+def test_prompt_is_loaded_per_source(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("PROMPTS_DIR", str(tmp_path / "prompts"))
+    get_settings.cache_clear()
+    write_prompt("message", CUSTOM)
+    sent = []
+
+    def classify(state, questions):
+        sent.append(questions)
+        return {"answers": {"keep": {"probabilities": {"yes": 0.9, "no": 0.1}}}}
+
+    monkeypatch.setattr(jev, "classify", classify)
+    client.post("/v1/ingest/messages", json=PERSONAL)
+    run(once=True)
+
+    row = rows()["message:sms-2"]
+    assert sent == [{"keep": {"type": "choice", "instructions": "남길까?",
+                              "criteria": {"yes": "남긴다", "no": "버린다"}}}]
+    # 0.9 < 파일의 threshold 0.95 → JEV_KEEP_THRESHOLD(0.3) 대신 파일 값을 쓴다
+    assert row["status"] == "discarded"
+    assert json.loads(row["verdict"])["prompt"] == "message"
+
+
+@pytest.mark.parametrize("body", [None, "keep_question = 'x'\nkeep_choice = 'y'\n", CUSTOM.replace('"yes"', '"maybe"', 1)])
+def test_bad_or_missing_prompt_is_retried(client, monkeypatch, tmp_path, body):
+    monkeypatch.setenv("PROMPTS_DIR", str(tmp_path / "prompts"))
+    get_settings.cache_clear()
+    if body is not None:
+        write_prompt("message", body)
+    monkeypatch.setattr(jev, "classify", lambda *a: pytest.fail("jev must not be called"))
+    client.post("/v1/ingest/messages", json=PERSONAL)
+    run(once=True)
+
+    row = rows()["message:sms-2"]
+    assert row["status"] == "pending" and "PromptError" in row["error"]
+
+
+def test_bundled_prompts_are_valid():
+    from app.services import prompts
+
+    for name in ("message", "email"):
+        assert prompts.load(name).keep_question == "relevance"

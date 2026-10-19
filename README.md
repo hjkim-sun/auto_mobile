@@ -50,6 +50,19 @@ uv run pytest
 API 문서(`/docs`, `/redoc`, `/openapi.json`)는 VPS 안에서 `http://127.0.0.1:8080/docs` 로만 열린다.
 Caddy 를 거친 요청(X-Forwarded-For 가 붙은 요청)에는 404 를 준다.
 
+## 판별 프롬프트 (`PROMPTS_DIR`, 기본 `prompts/`)
+
+워커는 이벤트 종류(`events.source`)마다 `prompts/{source}.toml` 의 질문을 Jev 에 보낸다.
+
+| 파일 | 대상 |
+|---|---|
+| `prompts/message.toml` | SMS/MMS |
+| `prompts/email.toml` | 메일 |
+
+`questions.<keep_question>` 의 `<keep_choice>` 확률이 `threshold`(생략하면 `JEV_KEEP_THRESHOLD`) 이상이면 `kept`.
+파일은 판별할 때마다 읽으므로 고친 뒤 재시작하지 않아도 된다. 파일이 없거나 형식이 틀리면 그 이벤트는 재시도 대기로 남는다.
+통화녹음용 프롬프트(`call.toml`)는 전사 텍스트를 판별에 넣을 때 만든다.
+
 ## 저장 경로 (`DATA_DIR`, 기본 `data/`)
 
 ```
@@ -74,7 +87,8 @@ app/
   db/session.py         SQLite 연결·스키마
   repositories/events.py  events 큐
   schemas/              응답 모델
-  services/             수신 저장, 판별 텍스트 변환, Jev 호출, 음성 전사
+  services/             수신 저장, 판별 텍스트 변환, 프롬프트 로드, Jev 호출, 음성 전사
+prompts/                판별 프롬프트 (이벤트 종류별 .toml)
   jobs/worker.py        판별 워커
 tests/
 ```

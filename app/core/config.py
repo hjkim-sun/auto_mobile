@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     typesafe_api_key: SecretStr = SecretStr("")
     typesafe_api_base: str = "https://api.typesafe.ai"
     jev_model: str = "jev-latest"
-    # useful 확률이 이 값 이상이면 남긴다. 놓치는 쪽이 더 손해라 낮게 잡는다.
+    # 판별 프롬프트 디렉토리. 이벤트 종류마다 {source}.toml (app/services/prompts.py)
+    prompts_dir: Path = Path("prompts")
+    # useful 확률이 이 값 이상이면 남긴다. 놓치는 쪽이 더 손해라 낮게 잡는다. 프롬프트 파일의 threshold 가 우선한다.
     jev_keep_threshold: float = Field(default=0.3, ge=0, le=1)
 
     # MMS 는 본문 POST 뒤에 첨부 PUT 이 이어지므로, 마지막 수신 후 이만큼 기다렸다 처리한다.
