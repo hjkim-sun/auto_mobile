@@ -68,7 +68,7 @@ def test_call_is_deduplicated_by_content(client):
     assert first.status_code == 201
 
     renamed = client.post("/v1/ingest/calls?filename=other.m4a", content=b"audio")
-    assert renamed.json() == {"event_id": first.json()["event_id"], "duplicate": True}
+    assert renamed.json() == {"event_id": first.json()["event_id"], "duplicate": True, "transcription_id": None}
     assert len(raw_files("calls")) == 1
     assert raw_files("calls")[0].endswith("_call.m4a")
 

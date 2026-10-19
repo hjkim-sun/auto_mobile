@@ -1,6 +1,7 @@
 """수신 API. 새로 받으면 201, 이미 받은 것이면 200.
 
 POST /v1/ingest/calls?filename=<파일명>        통화녹음 raw body. 중복 기준: sha256
+                                               새로 받으면 transcripts/calls 로 전사를 접수한다
 POST /v1/ingest/messages                       SMS/MMS JSON. 중복 기준: kind + id
 PUT  /v1/ingest/messages/{message_key}/attachments/{part_id}?filename=<파일명>
                                                MMS 첨부 raw body. message_key 는 "mms-10453" 형식
@@ -11,8 +12,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request, Response
 
 from app.api.deps import require_ingest_token
-from app.schemas.ingest import IngestResponse
-from app.services import ingest
+from app.core.config import get_settings
+from app.repositories import events
+from app.schemas.ingest import CallIngestResponse, IngestResponse
+from app.services import ingest, transcribe
+
+CALL_TRANSCRIPTS_DIR = "transcripts/calls"
 
 router = APIRouter(prefix="/v1/ingest", tags=["ingest"], dependencies=[Depends(require_ingest_token)])
 
@@ -22,10 +27,17 @@ def _result(response: Response, event_id: int, created: bool) -> IngestResponse:
     return IngestResponse(event_id=event_id, duplicate=not created)
 
 
-@router.post("/calls", response_model=IngestResponse, status_code=201)
-async def ingest_call(request: Request, response: Response, filename: str | None = None) -> IngestResponse:
-    return _result(response, *await ingest.ingest_call(
-        request.stream(), filename, request.headers.get("content-type")))
+@router.post("/calls", response_model=CallIngestResponse, status_code=201)
+async def ingest_call(request: Request, response: Response, filename: str | None = None) -> CallIngestResponse:
+    event_id, created = await ingest.ingest_call(
+        request.stream(), filename, request.headers.get("content-type"))
+    response.status_code = 201 if created else 200
+    result = CallIngestResponse(event_id=event_id, duplicate=not created)
+    if created:
+        language = get_settings().whisper_language
+        result.transcription_id = transcribe.submit(
+            events.get(event_id)["raw_path"], CALL_TRANSCRIPTS_DIR, None if language == "auto" else language)
+    return result
 
 
 @router.post("/messages", response_model=IngestResponse, status_code=201)

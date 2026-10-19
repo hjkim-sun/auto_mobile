@@ -46,6 +46,11 @@ def find_event(dedup_key: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM events WHERE dedup_key = ?", (dedup_key,)).fetchone()
 
 
+def get(event_id: int) -> sqlite3.Row | None:
+    with closing(connect()) as conn:
+        return conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+
+
 def _find_id(conn: sqlite3.Connection, dedup_key: str) -> int | None:
     row = conn.execute("SELECT id FROM events WHERE dedup_key = ?", (dedup_key,)).fetchone()
     return row["id"] if row else None

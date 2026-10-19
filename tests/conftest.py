@@ -17,6 +17,18 @@ def settings_env(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def no_whisper(monkeypatch):
+    """통화 수신이 전사를 접수하므로, 테스트에서 실제 모델을 올리지 않게 막는다."""
+    from app.services import transcribe
+
+    class NoModel:
+        def transcribe(self, *a, **kw):
+            raise RuntimeError("whisper disabled in tests")
+
+    monkeypatch.setattr(transcribe, "_model", NoModel())
+
+
 @pytest.fixture
 def client():
     from app.main import app

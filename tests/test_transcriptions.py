@@ -93,6 +93,19 @@ def test_failure_is_recorded(client, monkeypatch, call_file):
     assert job["status"] == "failed" and job["error"] == "RuntimeError: bad audio"
 
 
+def test_ingested_call_is_transcribed(client, fake_model):
+    res = client.post("/v1/ingest/calls?filename=통화 녹음 홍길동.m4a", content=b"fake audio")
+    assert res.status_code == 201
+    job = wait_done(client, res.json()["transcription_id"])
+    assert job["status"] == "done" and job["text"] == "여보세요\n홍길동입니다\n"
+    assert job["input_path"].startswith("raw/calls/") and job["output_dir"] == "transcripts/calls"
+
+    # 같은 녹음이 다시 오면 전사를 다시 접수하지 않는다
+    again = client.post("/v1/ingest/calls?filename=other.m4a", content=b"fake audio")
+    assert again.status_code == 200 and again.json()["transcription_id"] is None
+    assert len(fake_model.calls) == 1
+
+
 def test_unknown_job_and_token(client, monkeypatch):
     assert client.get("/v1/transcriptions/999").status_code == 404
     monkeypatch.setenv("INGEST_TOKEN", "secret")
