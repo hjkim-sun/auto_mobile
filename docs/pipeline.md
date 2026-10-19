@@ -1,11 +1,13 @@
 # 파이프라인 흐름
 
-API는 받은 데이터를 저장만 하고 바로 응답한다. 판별은 별도 프로세스인 워커가 `events` 테이블을 큐처럼 꺼내 쓰며 나중에 처리한다.
+API와 메일 폴러는 받은 데이터를 저장만 한다. 판별은 별도 프로세스인 워커가 `events` 테이블을 큐처럼 꺼내 쓰며 나중에 처리한다.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as Client<br/>(폰 Automate)
+    participant M as 메일 폴러<br/>(app/jobs/mail_poller.py)
+    participant N as IMAP<br/>(imap.naver.com)
     box API 프로세스 (uvicorn)
         participant A as FastAPI
         participant T as 전사 스레드
@@ -27,6 +29,14 @@ sequenceDiagram
     opt 통화녹음
         A->>T: 전사 접수 (응답에 transcription_id 포함)
         T->>S: Whisper 전사 결과 저장<br/>(data/transcripts/calls/*.txt)
+    end
+
+    Note over M,S: 1-1. 메일 수신: 폴러가 IMAP 에서 가져온다
+    loop 5분마다 (MAIL_POLL_SECONDS)
+        M->>N: 읽기 전용 SELECT INBOX, 커서 이후 UID 검색
+        N-->>M: 새 메일 원본 (BODY.PEEK, 읽음 처리 안 함)
+        M->>S: data/raw/emails/*.eml 저장, events 행 추가 (source=email)<br/>Message-ID 가 이미 있으면 건너뜀
+        M->>S: mail_cursors 에 마지막 UID 기록
     end
 
     Note over S,J: 2. 판별: 워커가 큐에서 하나씩 꺼낸다

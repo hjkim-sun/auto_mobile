@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = Field(default=3.0, gt=0)
     worker_max_attempts: int = Field(default=5, ge=1)
 
+    # 메일 폴러 (app/jobs/mail_poller.py). 네이버는 메일 환경설정에서 IMAP 을 켜고,
+    # 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다. user 가 비어 있으면 그 계정은 건너뛴다.
+    naver_imap_user: str = ""
+    naver_imap_password: SecretStr = SecretStr("")
+    naver_imap_host: str = "imap.naver.com"
+    mail_poll_seconds: float = Field(default=300, gt=0)
+    # 처음 폴링하거나 UIDVALIDITY 가 바뀌었을 때 며칠 전 메일부터 가져올지
+    mail_backfill_days: int = Field(default=1, ge=0)
+
     # 음성 전사 (faster-whisper). 모델은 CTranslate2 변환본 디렉토리를 미리 받아 둔다.
     whisper_model_dir: Path = Path.home() / "whisper" / "large-v3-turbo"
     whisper_compute_type: str = "int8"

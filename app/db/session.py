@@ -22,6 +22,15 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_queue ON events (status, available_at);
 
+CREATE TABLE IF NOT EXISTS mail_cursors (    -- 메일 폴러가 어디까지 가져왔는지
+    account      TEXT NOT NULL,
+    mailbox      TEXT NOT NULL,
+    uidvalidity  INTEGER NOT NULL,
+    last_uid     INTEGER NOT NULL,
+    updated_at   TEXT NOT NULL,
+    PRIMARY KEY (account, mailbox)
+);
+
 CREATE TABLE IF NOT EXISTS transcriptions (
     id           INTEGER PRIMARY KEY,
     input_path   TEXT NOT NULL,            -- data_dir 기준 음성 파일 경로

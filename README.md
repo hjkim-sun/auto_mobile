@@ -4,6 +4,7 @@
 
 ```
 수신 API (app/api)  ──▶  data/raw/ 원본 저장 + events 테이블 1건 1행
+메일 폴러 (app/jobs/mail_poller.py)  ──▶  IMAP 새 메일을 5분마다 가져와 같은 방식으로 저장
 워커 (app/jobs/worker.py)  ──▶  pending 이벤트를 하나씩 꺼내 kept / discarded 판별
 ```
 
@@ -18,6 +19,7 @@ uv run python -c "from huggingface_hub import snapshot_download as d; d('mobiusl
 cp .env.example .env   # TYPESAFE_API_KEY, INGEST_TOKEN 설정
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8080
 uv run python -m app.jobs.worker        # 반드시 1개만
+uv run python -m app.jobs.mail_poller   # 메일 폴링 (반드시 1개만)
 uv run pytest
 ```
 
@@ -65,6 +67,17 @@ Caddy 를 거친 요청(X-Forwarded-For 가 붙은 요청)에는 404 를 준다.
 파일은 판별할 때마다 읽으므로 고친 뒤 재시작하지 않아도 된다. 파일이 없거나 형식이 틀리면 그 이벤트는 재시도 대기로 남는다.
 통화녹음용 프롬프트(`call.toml`)는 전사 텍스트를 판별에 넣을 때 만든다.
 
+## 메일 폴러
+
+`NAVER_IMAP_USER`, `NAVER_IMAP_PASSWORD` 를 설정하면 `imap.naver.com` 의 받은메일함(INBOX)을
+`MAIL_POLL_SECONDS`(기본 300초)마다 확인해 새 메일을 `account=naver` 로 넣는다.
+네이버 메일 환경설정 → POP3/IMAP 설정에서 IMAP 을 켜야 하고, 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다.
+
+- 읽기 전용으로 열고 `BODY.PEEK` 로 가져오므로 메일이 읽음 처리되지 않는다.
+- 마지막으로 가져온 UID 를 `mail_cursors` 테이블에 남겨 다음 폴링은 그 뒤부터 가져온다.
+- 처음이거나 서버의 UIDVALIDITY 가 바뀌면 `MAIL_BACKFILL_DAYS`(기본 1)일 전부터 다시 가져온다. 중복은 Message-ID 로 걸러진다.
+- 인증 실패나 네트워크 오류는 로그만 남기고 다음 주기에 다시 시도한다.
+
 ## 저장 경로 (`DATA_DIR`, 기본 `data/`)
 
 ```
@@ -92,5 +105,6 @@ app/
   services/             수신 저장, 판별 텍스트 변환, 프롬프트 로드, Jev 호출, 음성 전사
 prompts/                판별 프롬프트 (이벤트 종류별 .toml)
   jobs/worker.py        판별 워커
+  jobs/mail_poller.py   IMAP 메일 폴러
 tests/
 ```

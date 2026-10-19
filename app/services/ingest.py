@@ -51,6 +51,16 @@ async def receive_body(stream: AsyncIterator[bytes], dest_dir: Path) -> tuple[Pa
     return tmp, size, digest.hexdigest()
 
 
+def save_body(data: bytes, dest_dir: Path) -> tuple[Path, int, str]:
+    """receive_body 의 동기판. 폴러처럼 이미 메모리에 받은 데이터를 저장할 때 쓴다."""
+    if not data:
+        raise IngestError(400, "empty body")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    tmp = dest_dir / f".incoming-{uuid4().hex}"
+    tmp.write_bytes(data)
+    return tmp, len(data), hashlib.sha256(data).hexdigest()
+
+
 def _existing(dedup_key: str, tmp: Path) -> tuple[int, bool] | None:
     """이미 받은 것이면 방금 받은 임시 파일을 지우고 기존 id 를 돌려준다."""
     event_id = events.find_event_id(dedup_key)
@@ -146,7 +156,15 @@ async def ingest_attachment(stream: AsyncIterator[bytes], message_key: str, part
 
 
 async def ingest_email(stream: AsyncIterator[bytes], account: str) -> tuple[int, bool]:
-    tmp, size, sha = await receive_body(stream, get_settings().raw_dir / "emails")
+    return _store_email(*await receive_body(stream, get_settings().raw_dir / "emails"), account)
+
+
+def ingest_email_bytes(data: bytes, account: str) -> tuple[int, bool]:
+    """메일 폴러(app/jobs/mail_poller.py)가 IMAP 으로 받은 원본을 넣는다."""
+    return _store_email(*save_body(data, get_settings().raw_dir / "emails"), account)
+
+
+def _store_email(tmp: Path, size: int, sha: str, account: str) -> tuple[int, bool]:
     with tmp.open("rb") as f:
         mail = BytesParser(policy=policy.default).parse(f, headersonly=True)
     message_id = str(mail.get("Message-ID") or "").strip()
