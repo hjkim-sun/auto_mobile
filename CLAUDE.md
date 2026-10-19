@@ -13,7 +13,7 @@
 API, 저장 경로, 실행 방법은 README.md에 정리돼 있다.
 
 ## 운영 환경 (VPS)
-
+- 개발 환경은 별도로 없다. 이 환경에서 개발을 수행한다. 
 - 코드 `/home/automan/auto_mobile`, 설정 `/home/automan/auto_mobile/.env`(git 제외, 600), 데이터 `/home/automan/auto_mobile/data/`
 - systemd 서비스
   - `auto-mobile-api`: uvicorn, `127.0.0.1:8080`에서만 받는다
@@ -54,3 +54,7 @@ VPS의 Claude가 지켜야 할 것:
 - `./goto.sh <블록번호>`로 플로우차트에서 블록으로 이동한다. 이동한 블록은 대개 (540, 796) 근처에 오지만, 차트 끝 블록은 가운데로 오지 않으므로 캡처해서 위치를 확인한다.
 - 실행 중인 플로우를 편집하면 플로우가 멈춘다("Stopped by user"). 편집을 마치면 플로우 화면에서 START로 다시 시작하고, 목록에서 `running fibers` 아이콘으로 확인한다.
 - 편집기 밖에서 `goto.sh`를 실행하면 플로우 메뉴(Duplicate/Delete)가 열린다. Delete를 누르지 않게 주의한다.
+
+## git 원칙
+작업 후에는 항상 commit 을 수행한다. 
+
