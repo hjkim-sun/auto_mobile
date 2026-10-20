@@ -44,7 +44,8 @@ def test_html_only_mail_is_converted_to_text(tmp_path):
 def test_ingest_writes_parsed_json_and_render_strips_tracking_query(client):
     event_id = client.post("/v1/ingest/emails?account=naver", content=multipart_mail()).json()["event_id"]
     emails = get_settings().raw_dir / "emails"
-    (eml,) = emails.glob("*.eml")
+    (eml,) = emails.rglob("*.eml")
+    assert eml.parent.name == "20261020"   # Date 헤더(한국 시간) 기준 날짜 폴더
     stored = json.loads(eml.with_suffix(".json").read_text())
     assert stored["attachments"][0]["filename"] == "견적서.pdf"
 
@@ -57,7 +58,7 @@ def test_ingest_writes_parsed_json_and_render_strips_tracking_query(client):
 
 def test_render_parses_mail_received_before_json_existed(client):
     client.post("/v1/ingest/emails?account=naver", content=multipart_mail())
-    (eml,) = (get_settings().raw_dir / "emails").glob("*.eml")
+    (eml,) = (get_settings().raw_dir / "emails").rglob("*.eml")
     eml.with_suffix(".json").unlink()
     assert "견적서 확인 부탁드립니다." in render_email({"account": "naver"}, eml)
     assert eml.with_suffix(".json").exists()

@@ -14,6 +14,7 @@ API, 저장 경로, 실행 방법은 README.md에 정리돼 있다.
 
 ## 운영 환경 (VPS)
 - 개발 환경은 별도로 없다. 이 환경에서 개발을 수행한다. 
+- docs/pipeline.md 파일을 읽고 변경된 흐름이 있으면 갱신한다. 
 - 코드 `/home/automan/auto_mobile`, 설정 `/home/automan/auto_mobile/.env`(git 제외, 600), 데이터 `/home/automan/auto_mobile/data/`
 - systemd 서비스
   - `auto-mobile-api`: uvicorn, `127.0.0.1:8080`에서만 받는다

@@ -104,16 +104,16 @@ MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "앱 비
 data/
   events.db
   raw/
-    calls/{sha256 앞 12자}_{파일명}
+    calls/YYYYMMDD/{sha256 앞 12자}_{파일명}      YYYYMMDD 는 파일명 속 녹음 시각(…_yyMMdd_HHmmss) 기준, 없으면 받은 날
     messages/YYYYMMDD/{sms|mms}-{id}.json     YYYYMMDD 는 문자 자체의 date 기준 (한국 시간)
     messages/YYYYMMDD/{sms|mms}-{id}/{첨부}
-    emails/{sha256 앞 16자}.eml
-    emails/{sha256 앞 16자}.json    .eml 을 푼 것: 헤더, date_text, 본문 텍스트(text), 첨부 목록
+    emails/YYYYMMDD/{sha256 앞 16자}.eml        YYYYMMDD 는 Date 헤더 기준 (한국 시간), 없으면 받은 날
+    emails/YYYYMMDD/{sha256 앞 16자}.json    .eml 을 푼 것: 헤더, date_text, 본문 텍스트(text), 첨부 목록
   transcripts/            전사 결과 기본 위치 (output_dir 로 바꿀 수 있음)
     calls/{sha256 앞 12자}_{파일명}.txt|.json   수신한 통화녹음의 자동 전사 결과
 ```
 
-날짜 표시(`date_text`), 문자 날짜 폴더, 통화녹음 기본 파일명은 `TIMEZONE`(기본 `Asia/Seoul`) 기준이다.
+날짜 표시(`date_text`), 문자·통화·메일 날짜 폴더, 통화녹음 기본 파일명은 `TIMEZONE`(기본 `Asia/Seoul`) 기준이다.
 
 ## 디렉토리
 

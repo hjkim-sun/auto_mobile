@@ -66,14 +66,15 @@ def test_attachment_requires_existing_message(client):
 
 
 def test_call_is_deduplicated_by_content(client):
-    path = "%2Fstorage%2Femulated%2F0%2FRecordings%2FCall%2Fcall.m4a"
+    path = "%2Fstorage%2Femulated%2F0%2FRecordings%2FCall%2Fcall_261019_121733.m4a"
     first = client.post(f"/v1/ingest/calls?filename={path}", content=b"audio")
     assert first.status_code == 201
 
     renamed = client.post("/v1/ingest/calls?filename=other.m4a", content=b"audio")
     assert renamed.json() == {"event_id": first.json()["event_id"], "duplicate": True, "transcription_id": None}
     assert len(raw_files("calls")) == 1
-    assert raw_files("calls")[0].endswith("_call.m4a")
+    (stored,) = (get_settings().raw_dir / "calls").rglob("*.m4a")
+    assert stored.parent.name == "20261019" and stored.name.endswith("_call_261019_121733.m4a")
 
 
 def test_empty_body_is_rejected(client):

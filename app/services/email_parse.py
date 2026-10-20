@@ -23,7 +23,7 @@ def parse_email(path: Path) -> dict:
         "cc": str(mail.get("Cc") or ""),
         "subject": str(mail.get("Subject") or ""),
         "date": str(mail.get("Date") or ""),
-        "date_text": _date_text(mail.get("Date")),
+        "date_text": date_text(mail.get("Date")),
         "text": body_text(mail),
         "attachments": [
             {"filename": part.get_filename(), "content_type": part.get_content_type(),
@@ -70,7 +70,7 @@ def body_text(mail: EmailMessage) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def _date_text(value: object) -> str | None:
+def date_text(value: object) -> str | None:
     try:
         return parsedate_to_datetime(str(value)).astimezone(get_settings().tz).strftime("%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):

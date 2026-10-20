@@ -18,9 +18,11 @@ from uuid import uuid4
 
 from app.core.config import get_settings
 from app.repositories import events
-from app.services.email_parse import write_parsed
+from app.services.email_parse import date_text, write_parsed
 
 MESSAGE_KEY_RE = re.compile(r"^(sms|mms)-[0-9A-Za-z_]+$")
+# 통화녹음 파일명 속 녹음 시각: "통화 홍길동_261020_133023.m4a", "call_20261020_133023.m4a"
+CALL_DATE_RE = re.compile(r"(?<!\d)(\d{6}|\d{8})_\d{6}(?!\d)")
 
 
 class IngestError(Exception):
@@ -87,6 +89,22 @@ def format_date(value: object) -> str | None:
     return datetime.fromtimestamp(ts, get_settings().tz).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def day_folder(date_text: str | None) -> str:
+    """"YYYY-MM-DD ..." 를 날짜 폴더 이름 YYYYMMDD 로 바꾼다. 없으면 지금(TIMEZONE) 날짜."""
+    return (date_text or datetime.now(get_settings().tz).isoformat())[:10].replace("-", "")
+
+
+def _call_day(name: str) -> str:
+    m = CALL_DATE_RE.search(name)
+    if m:
+        day = m.group(1) if len(m.group(1)) == 8 else "20" + m.group(1)
+        try:
+            return datetime.strptime(day, "%Y%m%d").strftime("%Y%m%d")
+        except ValueError:
+            pass
+    return day_folder(None)
+
+
 async def ingest_call(stream: AsyncIterator[bytes], filename: str | None,
                       content_type: str | None) -> tuple[int, bool]:
     name = safe_name(filename, datetime.now(get_settings().tz).strftime("call_%Y%m%d_%H%M%S.m4a"))
@@ -94,7 +112,9 @@ async def ingest_call(stream: AsyncIterator[bytes], filename: str | None,
     key = f"call:{sha}"
     if existing := _existing(key, tmp):
         return existing
-    path = tmp.with_name(f"{sha[:12]}_{name}")
+    # 날짜 폴더는 파일명 속 녹음 시각 기준이다. 없으면 받은 날짜: calls/YYYYMMDD/
+    path = tmp.parent / _call_day(name) / f"{sha[:12]}_{name}"
+    path.parent.mkdir(exist_ok=True)
     tmp.replace(path)
     payload = {"filename": name, "size": size, "sha256": sha, "content_type": content_type}
     return _register("call", key, payload, path)
@@ -127,8 +147,7 @@ def ingest_message(body: bytes) -> tuple[int, bool]:
 
     settings = get_settings()
     # 날짜 폴더는 문자 자체의 수신 시각 기준이다. 같은 문자가 다른 날 재전송돼도 같은 경로에 쌓인다.
-    day = (msg["date_text"] or msg["received_at"])[:10].replace("-", "")
-    path = settings.raw_dir / "messages" / day / f"{key}.json"
+    path = settings.raw_dir / "messages" / day_folder(msg["date_text"] or msg["received_at"]) / f"{key}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(msg, ensure_ascii=False, indent=2), encoding="utf-8")
     return _register("message", f"message:{key}", msg, path, delay=settings.message_settle_seconds)
@@ -173,7 +192,9 @@ def _store_email(tmp: Path, size: int, sha: str, account: str) -> tuple[int, boo
     key = f"email:{message_id}" if message_id else f"email:sha256:{sha}"
     if existing := _existing(key, tmp):
         return existing
-    path = tmp.with_name(f"{sha[:16]}.eml")
+    # 날짜 폴더는 Date 헤더(TIMEZONE 기준) 기준이다. 없거나 깨졌으면 받은 날짜: emails/YYYYMMDD/
+    path = tmp.parent / day_folder(date_text(mail.get("Date"))) / f"{sha[:16]}.eml"
+    path.parent.mkdir(exist_ok=True)
     tmp.replace(path)
     write_parsed(path)   # 같은 이름의 .json: 헤더, 본문 텍스트, 첨부 목록
     payload = {"account": account, "message_id": message_id or None,
