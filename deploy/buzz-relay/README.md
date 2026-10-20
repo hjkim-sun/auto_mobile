@@ -24,7 +24,7 @@ docker compose exec relay buzz-admin list-members
 docker compose exec relay buzz-admin add-member --pubkey npub1... [--role admin]
 ```
 
-초대 링크(7일, 1회용): `uv run python -m app.jobs.buzz_bot --invite` (저장소 루트에서)
+초대 링크(7일, 1회용): `uv run python -m app.jobs.buzz_bot --invite` (저장소 루트에서). 폰 Buzz 앱에는 `app_url`(`buzz://join?relay=wss://…&code=…`)을 넣는다. `url`은 웹 안내 페이지다.
 
 ## 백업
 

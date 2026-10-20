@@ -112,7 +112,7 @@ BUZZ_OWNER_PUBKEY=<사용자 npub>
 - relay 와는 공식 `buzz` CLI 로 주고받는다. CLI 는 데스크톱 릴리스 `.deb` 에 들어 있다:
   `dpkg-deb -x Buzz_<버전>_amd64.deb x && cp x/usr/bin/buzz ~/.local/bin/` (`BUZZ_CLI_PATH`, 기본 `~/.local/bin/buzz`)
 - relay 는 이 서버에서 docker 로 운영한다(`deploy/buzz-relay/README.md`). 봇이 커뮤니티 owner 다.
-- `python -m app.jobs.buzz_bot --whoami` 로 연결을 확인하고, `--invite` 로 사용자용 초대 링크(7일, 1회용)를 만든다.
+- `python -m app.jobs.buzz_bot --whoami` 로 연결을 확인하고, `--invite` 로 사용자용 초대 링크(7일, 1회용)를 만든다. 앱에는 출력의 `app_url`(`buzz://join?…`)을 넣는다.
   폰 Buzz 앱 첫 화면의 "Enter a community link" 에 그 링크를 넣는다.
 - 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
 - `BUZZ_OWNER_PUBKEY` 와의 DM 만 읽고, 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`, `일정`, `등록 N`, `안함 N`.

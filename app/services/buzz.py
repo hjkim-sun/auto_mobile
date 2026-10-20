@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from urllib.parse import urlencode
 
 import httpx
 
@@ -67,7 +68,8 @@ def get_messages(channel: str, since: int | None = None, limit: int = 50) -> lis
 def mint_invite(ttl_secs: int = 7 * 24 * 3600, max_uses: int = 1) -> dict:
     """커뮤니티 초대 링크. 봇이 relay owner/admin 이어야 한다. buzz CLI 에 없어 직접 NIP-98 로 부른다.
 
-    {"code", "url", "expires_at", "max_uses", "uses_remaining"}
+    {"code", "url", "app_url", "expires_at", "max_uses", "uses_remaining"}
+    url 은 웹 안내 페이지고, 폰 Buzz 앱에는 app_url(buzz://join?relay=wss://…&code=…)을 넣는다.
     """
     settings = get_settings()
     base = settings.buzz_relay_url.rstrip("/")
@@ -78,4 +80,7 @@ def mint_invite(ttl_secs: int = 7 * 24 * 3600, max_uses: int = 1) -> dict:
                       headers={"Authorization": auth, "Content-Type": "application/json"})
     if resp.status_code >= 400:
         raise BuzzError(f"invite mint {resp.status_code}: {resp.text[:300]}")
-    return resp.json()
+    invite = resp.json()
+    relay_ws = "ws" + base.removeprefix("http")
+    invite["app_url"] = "buzz://join?" + urlencode({"relay": relay_ws, "code": invite["code"]})
+    return invite
