@@ -77,6 +77,50 @@ def test_call_is_deduplicated_by_content(client):
     assert stored.parent.name == "20261019" and stored.name.endswith("_call_261019_121733.m4a")
 
 
+CALL_INFO = "direction=outgoing&number=01012345678&name=%ED%99%8D%EA%B8%B8%EB%8F%99&call_date=1792383789902"
+
+
+def call_payload(event_id):
+    from app.repositories import events
+    return json.loads(events.get(event_id)["payload"])
+
+
+def test_call_info_is_stored(client):
+    res = client.post(f"/v1/ingest/calls?filename=call_261019_132315.m4a&{CALL_INFO}", content=b"audio")
+    assert res.status_code == 201
+    payload = call_payload(res.json()["event_id"])
+    assert payload["direction"] == "outgoing"
+    assert payload["number"] == "01012345678"
+    assert payload["name"] == "홍길동"
+    assert payload["call_date"] == 1792383789902
+    assert payload["call_date_text"] == "2026-10-19 13:23:09"
+
+
+def test_call_without_info_or_with_blank_info_works_as_before(client):
+    plain = client.post("/v1/ingest/calls?filename=a.m4a", content=b"a").json()["event_id"]
+    blank = client.post("/v1/ingest/calls?filename=b.m4a&direction=&number=&name=&call_date=",
+                        content=b"b").json()["event_id"]
+    for event_id in (plain, blank):
+        assert not {"direction", "number", "name", "call_date"} & call_payload(event_id).keys()
+
+
+def test_call_info_is_validated(client):
+    assert client.post("/v1/ingest/calls?direction=sideways", content=b"a").status_code == 422
+    assert client.post("/v1/ingest/calls?number=abc", content=b"a").status_code == 422
+    assert client.post("/v1/ingest/calls?call_date=yesterday", content=b"a").status_code == 422
+
+
+def test_call_resent_with_info_fills_missing_values(client):
+    event_id = client.post("/v1/ingest/calls?filename=a.m4a", content=b"audio").json()["event_id"]
+    again = client.post(f"/v1/ingest/calls?filename=a.m4a&{CALL_INFO}", content=b"audio")
+    assert again.json()["duplicate"] is True
+    assert call_payload(event_id)["direction"] == "outgoing"
+
+    # 이미 있는 값은 덮어쓰지 않는다
+    client.post("/v1/ingest/calls?filename=a.m4a&direction=incoming", content=b"audio")
+    assert call_payload(event_id)["direction"] == "outgoing"
+
+
 def test_empty_body_is_rejected(client):
     assert client.post("/v1/ingest/calls", content=b"").status_code == 400
 

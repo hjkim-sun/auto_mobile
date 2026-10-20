@@ -33,12 +33,32 @@ def call_transcript(event: sqlite3.Row) -> str | None:
     return (get_settings().data_dir / job["text_path"]).read_text(encoding="utf-8")
 
 
+DIRECTIONS = {"incoming": "수신", "outgoing": "발신"}
+
+
+def call_party(payload: dict) -> str | None:
+    """폰이 붙인 통화 정보 한 줄. 예: "수신 홍길동 (01012345678)". 정보가 없으면 None."""
+    who = " ".join(filter(None, [payload.get("name"),
+                                  f"({payload['number']})" if payload.get("number") else None]))
+    parts = [DIRECTIONS.get(payload.get("direction") or ""), who]
+    return " ".join(filter(None, parts)) or None
+
+
+def call_header(payload: dict) -> list[str]:
+    # 파일명에도 상대 이름과 시각이 들어 있다 (예: "통화 홍길동_261020_195821.m4a")
+    lines = [f"[통화녹음] 파일: {payload.get('filename')}"]
+    if party := call_party(payload):
+        lines.append(f"통화: {party}")
+    if payload.get("call_date_text"):
+        lines.append(f"시각: {payload['call_date_text']}")
+    return lines
+
+
 def render_call(event: sqlite3.Row, payload: dict) -> str | None:
     text = call_transcript(event)
     if not text or not text.strip():
         return None
-    # 파일명에 상대 이름과 시각이 들어 있다 (예: "통화 홍길동_261020_195821.m4a")
-    return "\n".join([f"[통화녹음] 파일: {payload.get('filename')}", "", text])
+    return "\n".join([*call_header(payload), "", text])
 
 
 def render_message(msg: dict) -> str | None:

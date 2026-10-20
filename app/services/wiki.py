@@ -16,7 +16,7 @@ from datetime import datetime
 from app.core.config import get_settings
 from app.db.session import connect
 from app.repositories import calendar_items
-from app.services.render import render
+from app.services.render import call_header, render
 
 LABELS = {"message": "문자", "email": "메일", "call": "통화"}
 WRITE_TOOLS = "Read,Write,Edit,Glob,Grep"
@@ -65,9 +65,8 @@ def source_text(event: sqlite3.Row) -> str | None:
         text = (get_settings().data_dir / row["text_path"]).read_text(encoding="utf-8")
     else:
         text = "(전사 없음)"
-    filename = json.loads(event["payload"]).get("filename", "")
     # 화자 번호는 처음 말한 사람부터 매기므로 누가 "나"인지 모른다.
-    return "\n".join([f"[CALL] 녹음 파일: {filename}",
+    return "\n".join([*call_header(json.loads(event["payload"])),
                       "화자1/화자2 중 누가 위키 주인인지는 표시돼 있지 않다. 내용으로 판단한다.",
                       "", text])
 

@@ -23,7 +23,7 @@ from app.core.config import get_settings
 from app.db.session import connect
 from app.repositories import calendar_items, events
 from app.services import calendar, wiki
-from app.services.render import call_transcript, render
+from app.services.render import call_party, call_transcript, render
 
 SOURCES = {"문자": "message", "메일": "email", "통화": "call"}
 LABELS = {"message": "문자", "email": "메일", "call": "통화"}
@@ -54,7 +54,7 @@ def summary_line(event: sqlite3.Row) -> str:
     elif event["source"] == "email":
         what = f"{_sender(p.get('from', ''))}: {p.get('subject') or '(제목 없음)'}"
     else:
-        what = p.get("filename", "")
+        what = call_party(p) or p.get("filename", "")
     return f"#{event['id']} [{label}] {_local(event['created_at'])} {what}"
 
 

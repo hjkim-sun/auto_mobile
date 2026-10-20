@@ -22,9 +22,9 @@ sequenceDiagram
     participant G as 네이버 캘린더<br/>(CalDAV)
 
     Note over C,S: 1. 수신: 저장하고 바로 응답한다
-    C->>A: POST /v1/ingest/messages 또는 /calls<br/>(Authorization: Bearer 토큰)
+    C->>A: POST /v1/ingest/messages 또는 /calls<br/>(Authorization: Bearer 토큰)<br/>통화는 통화 기록에서 찾은 수신/발신, 번호, 이름, 시각을 쿼리로 붙임
     A->>S: 원본 파일 저장, events 행 추가<br/>(status=pending, 통화는 status=transcribing)
-    A-->>C: 201 {event_id}<br/>(이미 받은 데이터면 저장 없이 200)
+    A-->>C: 201 {event_id}<br/>(이미 받은 데이터면 저장 없이 200. 통화는 비어 있던 통화 정보만 채움)
 
     opt MMS 첨부
         C->>A: PUT /v1/ingest/messages/mms-{id}/attachments/{part}
@@ -49,7 +49,7 @@ sequenceDiagram
     Note over S,J: 2. 판별: 워커가 큐에서 하나씩 꺼낸다
     loop 3초마다
         W->>S: pending이고 available_at이 지난 이벤트 1건 꺼냄 (status=processing)<br/>전사 중인 통화(transcribing)는 꺼내지 않음
-        W->>W: 판별용 텍스트 만들기 (render.py)<br/>통화는 파일명 + 전사문
+        W->>W: 판별용 텍스트 만들기 (render.py)<br/>통화는 파일명 + 수신/발신·상대 + 전사문
         alt 판별할 텍스트 없음 (전사 실패한 통화, 이미지만 있는 MMS)
             W->>S: status=kept (놓치지 않게 일단 남김)
         else 텍스트 있음

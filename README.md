@@ -33,7 +33,7 @@ uv run pytest
 
 | 메서드 | 경로 | body |
 |---|---|---|
-| POST | `/v1/ingest/calls?filename=` | raw 오디오 |
+| POST | `/v1/ingest/calls?filename=&direction=&number=&name=&call_date=` | raw 오디오 |
 | POST | `/v1/ingest/messages` | `{"kind": "sms"\|"mms", "id", "from", "date", "text"?, "parts"?}` |
 | PUT | `/v1/ingest/messages/{sms\|mms}-{id}/attachments/{part_id}?filename=` | raw 첨부 |
 | POST | `/v1/ingest/emails?account=naver\|gmail` | raw .eml |
@@ -46,6 +46,10 @@ uv run pytest
 수신(`/v1/ingest/*`)은 새로 받으면 201, 이미 받은 것이면 200. 응답 body 는 `{"event_id", "duplicate"}`.
 통화녹음(`/v1/ingest/calls`)은 새로 받으면 곧바로 `transcripts/calls/YYYYMMDD`(원본과 같은 날짜 폴더) 로 전사를 접수하고 응답에 `transcription_id` 를 붙인다
 (중복이면 `null`). 진행은 `GET /v1/transcriptions/{transcription_id}` 로 본다.
+통화 정보 쿼리는 모두 선택이고 빈 값은 없는 것으로 본다. 폰이 통화 기록(`content://call_log/calls`)에서 찾아 붙인다.
+`direction`(`incoming`\|`outgoing`\|`unknown`), `number`(상대 번호), `name`(연락처 이름), `call_date`(통화 시작, epoch ms).
+payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위키에 `통화: 수신 홍길동 (01012345678)` 처럼 붙인다.
+같은 녹음을 다시 보내면 저장은 건너뛰고 payload 에 비어 있던 통화 정보만 채운다.
 
 판별 내역(`/v1/verdicts/*`)은 최신순으로 `{"items": [...], "next_before_id"}` 를 돌려준다.
 `status` 는 `pending|processing|kept|discarded|failed`, 다음 페이지는 `?before_id=<next_before_id>`.

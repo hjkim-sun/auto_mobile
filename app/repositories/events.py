@@ -59,6 +59,21 @@ def _find_id(conn: sqlite3.Connection, dedup_key: str) -> int | None:
     return row["id"] if row else None
 
 
+def fill_payload(event_id: int, values: dict) -> bool:
+    """payload 에 없거나 비어 있는 키만 values 로 채운다. 바뀌었으면 True."""
+    with closing(connect()) as conn:
+        row = conn.execute("SELECT payload FROM events WHERE id = ?", (event_id,)).fetchone()
+        if row is None:
+            return False
+        payload = json.loads(row["payload"])
+        missing = {k: v for k, v in values.items() if v not in (None, "") and payload.get(k) in (None, "")}
+        if not missing:
+            return False
+        conn.execute("UPDATE events SET payload = ?, updated_at = ? WHERE id = ?",
+                     (json.dumps({**payload, **missing}, ensure_ascii=False), now(), event_id))
+        return True
+
+
 def postpone(event_id: int, delay: float) -> None:
     """아직 처리 전이면 처리 시점을 뒤로 민다 (MMS 첨부 도착 시)."""
     with closing(connect()) as conn:

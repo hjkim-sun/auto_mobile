@@ -1,7 +1,9 @@
 """수신 API. 새로 받으면 201, 이미 받은 것이면 200.
 
 POST /v1/ingest/calls?filename=<파일명>        통화녹음 raw body. 중복 기준: sha256
-                                               새로 받으면 transcripts/calls/YYYYMMDD 로 전사를 접수한다
+     [&direction=incoming|outgoing|unknown]    새로 받으면 transcripts/calls/YYYYMMDD 로 전사를 접수한다
+     [&number=<상대 번호>&name=<연락처 이름>]     통화 정보는 폰이 통화 기록(content://call_log/calls)에서 찾아 붙인다.
+     [&call_date=<통화 시작 epoch ms>]           모두 선택. 빈 값은 없는 것으로 본다
 POST /v1/ingest/messages                       SMS/MMS JSON. 중복 기준: kind + id
 PUT  /v1/ingest/messages/{message_key}/attachments/{part_id}?filename=<파일명>
                                                MMS 첨부 raw body. message_key 는 "mms-10453" 형식
@@ -30,9 +32,17 @@ def _result(response: Response, event_id: int, created: bool) -> IngestResponse:
 
 
 @router.post("/calls", response_model=CallIngestResponse, status_code=201)
-async def ingest_call(request: Request, response: Response, filename: str | None = None) -> CallIngestResponse:
+async def ingest_call(
+    request: Request, response: Response, filename: str | None = None,
+    direction: str | None = Query(None, pattern=r"^(incoming|outgoing|unknown)?$"),
+    number: str | None = Query(None, max_length=40, pattern=r"^[0-9+*#() -]*$"),
+    name: str | None = Query(None, max_length=100),
+    call_date: str | None = Query(None, pattern=r"^[0-9]*$"),
+) -> CallIngestResponse:
+    info = {"direction": direction, "number": number, "name": name, "call_date": call_date}
     event_id, created = await ingest.ingest_call(
-        request.stream(), filename, request.headers.get("content-type"))
+        request.stream(), filename, request.headers.get("content-type"),
+        {k: v.strip() for k, v in info.items() if v and v.strip()})
     response.status_code = 201 if created else 200
     result = CallIngestResponse(event_id=event_id, duplicate=not created)
     if created:

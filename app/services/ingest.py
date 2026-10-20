@@ -107,17 +107,24 @@ def _call_day(name: str) -> str:
 
 
 async def ingest_call(stream: AsyncIterator[bytes], filename: str | None,
-                      content_type: str | None) -> tuple[int, bool]:
+                      content_type: str | None, info: dict | None = None) -> tuple[int, bool]:
+    """info: 폰이 통화 기록에서 찾아 붙인 direction, number, name, call_date (모두 선택)."""
     name = safe_name(filename, datetime.now(get_settings().tz).strftime("call_%Y%m%d_%H%M%S.m4a"))
     tmp, size, sha = await receive_body(stream, get_settings().raw_dir / "calls")
     key = f"call:{sha}"
+    info = dict(info or {})
+    if info.get("call_date"):
+        info["call_date"] = int(info["call_date"])
+        info["call_date_text"] = format_date(info["call_date"])
     if existing := _existing(key, tmp):
+        # 통화 정보를 붙이기 전에 받은 녹음을 폰이 다시 보내면 비어 있던 값만 채운다.
+        events.fill_payload(existing[0], info)
         return existing
     # 날짜 폴더는 파일명 속 녹음 시각 기준이다. 없으면 받은 날짜: calls/YYYYMMDD/
     path = tmp.parent / _call_day(name) / f"{sha[:12]}_{name}"
     path.parent.mkdir(exist_ok=True)
     tmp.replace(path)
-    payload = {"filename": name, "size": size, "sha256": sha, "content_type": content_type}
+    payload = {"filename": name, "size": size, "sha256": sha, "content_type": content_type, **info}
     # 전사가 끝나야 판별할 수 있다. 전사 스레드가 끝날 때 pending 으로 바꾼다.
     return _register("call", key, payload, path, status="transcribing")
 

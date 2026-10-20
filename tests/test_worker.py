@@ -148,10 +148,14 @@ CALL_FILE = "통화 홍길동_261020_195821.m4a"
 CALL_RAW = f"raw/calls/20261020/abc_{CALL_FILE}"
 
 
+CALL_INFO = {"direction": "incoming", "number": "01012345678", "name": "홍길동",
+             "call_date": 1792494981000, "call_date_text": "2026-10-20 19:56:21"}
+
+
 def add_call():
     from app.repositories import events, transcriptions
 
-    events.insert_event("call", "call:abc", {"filename": CALL_FILE}, CALL_RAW, status="transcribing")
+    events.insert_event("call", "call:abc", {"filename": CALL_FILE, **CALL_INFO}, CALL_RAW, status="transcribing")
     return transcriptions.insert(CALL_RAW, "transcripts/calls/20261020", None)["id"]
 
 
@@ -175,6 +179,7 @@ def test_call_is_classified_from_transcript_after_it_is_done(client, fake_jev):
     assert row["status"] == "kept" and row["attempts"] == 1
     assert json.loads(row["verdict"])["prompt"] == "call"
     assert CALL_FILE in fake_jev[0] and "내일 3시에" in fake_jev[0]
+    assert "통화: 수신 홍길동 (01012345678)" in fake_jev[0] and "시각: 2026-10-20 19:56:21" in fake_jev[0]
 
 
 def test_failed_transcription_releases_call_without_text(client, fake_jev, monkeypatch):
