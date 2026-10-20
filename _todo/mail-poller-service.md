@@ -1,6 +1,6 @@
 # 메일 폴러를 systemd 서비스로 등록하기 (root 작업)
 
-상태: 대기 (사용자가 root로 진행)
+상태: 대기. `_todo/root-setup.sh` 를 root 로 실행하면 된다
 
 `app/jobs/mail_poller.py`는 구현돼 있지만 아직 서비스로 등록하지 않았다.
 automan 계정은 unit 파일과 sudoers를 고칠 수 없으므로 아래 작업은 root로 한다.
