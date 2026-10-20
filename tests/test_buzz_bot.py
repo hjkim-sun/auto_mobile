@@ -92,3 +92,17 @@ def test_unknown_command_shows_help(fake_buzz):
     assert bot.handle("뭐해") == bot.HELP
     assert bot.handle("#999") == "#999 없음"
     assert bot.handle("오늘") == "오늘 남긴 것: 없음"
+
+
+def test_bip340_vector_and_key_encoding():
+    from app.services import nostr
+
+    # BIP-340 공식 test vector 0
+    sk = "0000000000000000000000000000000000000000000000000000000000000003"
+    assert nostr.public_key(sk).upper() == "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9"
+    sig = nostr.schnorr_sign(bytes(32), sk, aux=bytes(32)).hex().upper()
+    assert sig == ("E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA8215"
+                   "25F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0")
+    assert nostr.bech32_encode("npub", bytes.fromhex(OWNER)) == OWNER_NPUB
+    nsec = nostr.bech32_encode("nsec", bytes.fromhex(sk))
+    assert nostr.public_key(nsec) == nostr.public_key(sk)

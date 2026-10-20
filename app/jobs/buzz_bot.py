@@ -2,7 +2,7 @@
 
 반드시 1개 프로세스만 띄운다. 명령은 app/services/bot.py 참고.
 처음 띄울 때 이미 있던 이벤트는 알리지 않는다(buzz_state.notify_after_id).
-실행: python -m app.jobs.buzz_bot [--once | --whoami]
+실행: python -m app.jobs.buzz_bot [--once | --whoami | --invite]
 """
 from __future__ import annotations
 
@@ -89,10 +89,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Notify kept events and answer commands on Buzz.")
     parser.add_argument("--once", action="store_true", help="한 번만 돌고 종료")
     parser.add_argument("--whoami", action="store_true", help="봇 프로필(pubkey)을 출력하고 종료. 연결 확인용")
+    parser.add_argument("--invite", action="store_true",
+                        help="커뮤니티 초대 링크(7일, 1회용)를 만들어 출력하고 종료. 봇이 relay owner 여야 한다")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     if args.whoami:
         print(json.dumps(buzz.whoami(), ensure_ascii=False, indent=2))
+        return 0
+    if args.invite:
+        print(json.dumps(buzz.mint_invite(), ensure_ascii=False, indent=2))
         return 0
     run(once=args.once)
     return 0

@@ -9,10 +9,12 @@ import json
 import os
 import subprocess
 
+import httpx
+
 from app.core.config import get_settings
+from app.services import nostr
 
 CLI_TIMEOUT = 60
-BECH32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 
 
 class BuzzError(Exception):
@@ -24,19 +26,7 @@ def to_hex_pubkey(value: str) -> str:
     value = value.strip().lower()
     if len(value) == 64 and all(c in "0123456789abcdef" for c in value):
         return value
-    if not value.startswith("npub1"):
-        raise ValueError(f"not an npub or hex pubkey: {value!r}")
-    data = [BECH32.index(c) for c in value[5:]][:-6]   # 끝 6자는 체크섬
-    acc = bits = 0
-    out = bytearray()
-    for d in data:
-        acc, bits = (acc << 5) | d, bits + 5
-        if bits >= 8:
-            bits -= 8
-            out.append((acc >> bits) & 0xFF)
-    if len(out) != 32:
-        raise ValueError(f"bad npub length: {value!r}")
-    return out.hex()
+    return nostr.bech32_decode(value, "npub").hex()
 
 
 def run(*args: str, stdin: str | None = None):
@@ -72,3 +62,20 @@ def get_messages(channel: str, since: int | None = None, limit: int = 50) -> lis
     if isinstance(result, dict):   # 버전에 따라 {"messages": [...]} 로 감싸 올 수 있다
         result = result.get("messages") or result.get("events") or []
     return result or []
+
+
+def mint_invite(ttl_secs: int = 7 * 24 * 3600, max_uses: int = 1) -> dict:
+    """커뮤니티 초대 링크. 봇이 relay owner/admin 이어야 한다. buzz CLI 에 없어 직접 NIP-98 로 부른다.
+
+    {"code", "url", "expires_at", "max_uses", "uses_remaining"}
+    """
+    settings = get_settings()
+    base = settings.buzz_relay_url.rstrip("/")
+    url = f"{base}/api/invites"
+    body = json.dumps({"ttl_secs": ttl_secs, "max_uses": max_uses}).encode()
+    auth = nostr.nip98_header(settings.buzz_private_key.get_secret_value(), "POST", url, body)
+    resp = httpx.post(url, content=body, timeout=30,
+                      headers={"Authorization": auth, "Content-Type": "application/json"})
+    if resp.status_code >= 400:
+        raise BuzzError(f"invite mint {resp.status_code}: {resp.text[:300]}")
+    return resp.json()

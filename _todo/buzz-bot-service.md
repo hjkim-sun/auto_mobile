@@ -6,8 +6,8 @@
 
 ## 먼저 할 일 (root 아님)
 
-1. Buzz 앱에서 봇 npub을 커뮤니티 멤버로 초대한다. 봇 npub은 `.env`의 `BUZZ_PRIVATE_KEY` 위 주석에 있다.
-2. `.env`에 `BUZZ_RELAY_URL`, `BUZZ_OWNER_PUBKEY`(사용자 npub)를 넣는다.
+1. `_todo/buzz-relay-root.md`를 마치고 relay를 띄운다. 봇은 relay owner라 따로 초대하지 않는다.
+2. 사용자가 초대 링크로 들어온 뒤, `buzz-admin list-members`로 사용자 pubkey를 찾아 `.env`의 `BUZZ_OWNER_PUBKEY`에 넣는다.
 3. `uv run python -m app.jobs.buzz_bot --whoami`로 relay 연결과 봇 pubkey를 확인한다.
 4. `uv run python -m app.jobs.buzz_bot --once`로 DM이 열리는지 본다.
 

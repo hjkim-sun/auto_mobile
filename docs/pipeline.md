@@ -16,7 +16,7 @@ sequenceDiagram
     participant W as 워커<br/>(app/jobs/worker.py)
     participant J as Jev<br/>(typesafe.ai)
     participant B as Buzz 봇<br/>(app/jobs/buzz_bot.py)
-    participant U as 사용자<br/>(Buzz 앱 DM)
+    participant U as 사용자<br/>(Buzz 앱 DM, 자체 relay :8443 경유)
 
     Note over C,S: 1. 수신: 저장하고 바로 응답한다
     C->>A: POST /v1/ingest/messages 또는 /calls<br/>(Authorization: Bearer 토큰)
