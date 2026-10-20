@@ -139,5 +139,68 @@ def test_bad_or_missing_prompt_is_retried(client, monkeypatch, tmp_path, body):
 def test_bundled_prompts_are_valid():
     from app.services import prompts
 
-    for name in ("message", "email"):
+    for name in ("message", "email", "call"):
         assert prompts.load(name).keep_question == "relevance"
+
+
+CALL_FILE = "통화 홍길동_261020_195821.m4a"
+
+
+def add_call(transcript_status=None, text="[화자1] 내일 3시에 뵙겠습니다"):
+    from app.repositories import events, transcriptions
+
+    raw = f"raw/calls/20261020/abc_{CALL_FILE}"
+    event_id, _ = events.insert_event("call", "call:abc", {"filename": CALL_FILE}, raw)
+    if transcript_status:
+        job = transcriptions.insert(raw, "transcripts/calls/20261020", None)
+        if transcript_status == "done":
+            out = get_settings().data_dir / "transcripts/calls/20261020/abc.txt"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(text, encoding="utf-8")
+            transcriptions.finish(job["id"], "transcripts/calls/20261020/abc.txt", 7.0)
+        elif transcript_status == "failed":
+            transcriptions.fail(job["id"], "boom")
+    return event_id
+
+
+def test_call_waits_for_transcript_then_is_classified(client, fake_jev):
+    from app.repositories import transcriptions
+
+    add_call("queued")
+    run(once=True)
+    row = rows()["call:abc"]
+    # 전사 중에는 판별하지 않고, 시도 횟수도 쓰지 않는다
+    assert row["status"] == "pending" and row["attempts"] == 0 and row["available_at"] > row["created_at"]
+    assert fake_jev == []
+
+    out = get_settings().data_dir / "transcripts/calls/20261020/abc.txt"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("[화자1] 내일 3시에 뵙겠습니다", encoding="utf-8")
+    transcriptions.finish(transcriptions.latest_for(row["raw_path"])["id"], "transcripts/calls/20261020/abc.txt", 7.0)
+    with closing(connect()) as conn:
+        conn.execute("UPDATE events SET available_at = created_at")
+    run(once=True)
+
+    row = rows()["call:abc"]
+    assert row["status"] == "kept"
+    assert json.loads(row["verdict"])["prompt"] == "call"
+    assert CALL_FILE in fake_jev[0] and "내일 3시에" in fake_jev[0]
+
+
+def test_call_without_transcript_is_kept_without_jev(client, fake_jev):
+    add_call("failed")
+    run(once=True)
+    row = rows()["call:abc"]
+    assert row["status"] == "kept" and json.loads(row["verdict"]) == {"reason": "no_text"}
+    assert fake_jev == []
+
+
+def test_call_waits_briefly_for_transcript_to_be_submitted(client, fake_jev):
+    add_call(None)
+    run(once=True)
+    assert rows()["call:abc"]["status"] == "pending"
+
+    with closing(connect()) as conn:
+        conn.execute("UPDATE events SET created_at = '2000-01-01T00:00:00+00:00', available_at = created_at")
+    run(once=True)
+    assert rows()["call:abc"]["status"] == "kept"

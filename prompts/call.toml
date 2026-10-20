@@ -1,0 +1,16 @@
+# Jev 판별 프롬프트: 통화녹음 전사 (events.source = call)
+# 형식은 app/services/prompts.py 참고. 판별할 때마다 읽으므로 고친 뒤 재시작하지 않아도 된다.
+
+# questions.<keep_question> 의 <keep_choice> 확률이 threshold 이상이면 kept, 아니면 discarded
+keep_question = "relevance"
+keep_choice = "useful"
+# threshold = 0.3   # 생략하면 .env 의 JEV_KEEP_THRESHOLD
+
+[questions.relevance]
+type = "choice"
+instructions = """사용자의 휴대폰 통화를 녹음해 자동 전사한 글이다. 파일명에 통화 상대(연락처 이름 또는 번호)와 시각이 들어 있다.
+전사는 오탈자가 많고 화자 구분이 틀릴 수 있다. 개인비서가 이 통화를 기록하거나 사용자에게 알릴 가치가 있는가?"""
+
+[questions.relevance.criteria]
+useful = "약속·일정·모임 이야기, 업무 연락, 부탁이나 할 일, 가족이나 지인과의 개인적 대화, 결제·예약·배송·병원·관공서 관련 내용처럼 사용자가 기억하거나 대응해야 할 통화"
+noise = "광고·영업·스팸 전화, 자동응답 안내, 잘못 건 전화, 내용 없이 끊긴 통화나 연결음·부재중 안내만 녹음된 통화"

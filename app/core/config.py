@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     message_settle_seconds: int = Field(default=30, ge=0)
     worker_poll_seconds: float = Field(default=3.0, gt=0)
     worker_max_attempts: int = Field(default=5, ge=1)
+    # 통화 전사가 끝나지 않은 이벤트를 다시 볼 때까지 기다리는 시간
+    worker_wait_seconds: float = Field(default=15, gt=0)
 
     # 메일 폴러 (app/jobs/mail_poller.py). JSON 목록으로 넣는다:
     # MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "비밀번호"}, ...]'

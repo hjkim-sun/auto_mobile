@@ -75,10 +75,12 @@ Caddy 를 거친 요청(X-Forwarded-For 가 붙은 요청)에는 404 를 준다.
 |---|---|
 | `prompts/message.toml` | SMS/MMS |
 | `prompts/email.toml` | 메일 |
+| `prompts/call.toml` | 통화녹음 전사 |
 
 `questions.<keep_question>` 의 `<keep_choice>` 확률이 `threshold`(생략하면 `JEV_KEEP_THRESHOLD`) 이상이면 `kept`.
 파일은 판별할 때마다 읽으므로 고친 뒤 재시작하지 않아도 된다. 파일이 없거나 형식이 틀리면 그 이벤트는 재시도 대기로 남는다.
-통화녹음용 프롬프트(`call.toml`)는 전사 텍스트를 판별에 넣을 때 만든다.
+통화녹음은 전사가 끝날 때까지 `WORKER_WAIT_SECONDS`(기본 15초)마다 다시 꺼내 보고(시도 횟수는 쓰지 않는다), 끝나면 파일명과 전사문으로 판별한다.
+전사가 실패했거나 2분이 지나도 전사 작업이 없으면 Jev 없이 `kept`(`no_text`)로 남긴다.
 
 ## 메일 폴러
 

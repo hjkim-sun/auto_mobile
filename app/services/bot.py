@@ -23,7 +23,7 @@ from app.core.config import get_settings
 from app.db.session import connect
 from app.repositories import calendar_items, events
 from app.services import calendar, wiki
-from app.services.render import render
+from app.services.render import NotReady, call_transcript, render
 
 SOURCES = {"문자": "message", "메일": "email", "통화": "call"}
 LABELS = {"message": "문자", "email": "메일", "call": "통화"}
@@ -65,12 +65,10 @@ def _sender(value: str) -> str:
 
 
 def transcript(event: sqlite3.Row) -> str | None:
-    with closing(connect()) as conn:
-        row = conn.execute("SELECT text_path FROM transcriptions WHERE input_path = ? AND status = 'done'"
-                           " ORDER BY id DESC LIMIT 1", (event["raw_path"],)).fetchone()
-    if row is None:
+    try:
+        return call_transcript(event)
+    except NotReady:
         return None
-    return (get_settings().data_dir / row["text_path"]).read_text(encoding="utf-8")
 
 
 def body(event: sqlite3.Row) -> str:

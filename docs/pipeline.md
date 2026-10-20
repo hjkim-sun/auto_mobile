@@ -48,8 +48,10 @@ sequenceDiagram
     Note over S,J: 2. 판별: 워커가 큐에서 하나씩 꺼낸다
     loop 3초마다
         W->>S: pending이고 available_at이 지난 이벤트 1건 꺼냄 (status=processing)
-        W->>W: 판별용 텍스트 만들기 (render.py)
-        alt 판별할 텍스트 없음 (통화녹음, 이미지만 있는 MMS)
+        W->>W: 판별용 텍스트 만들기 (render.py)<br/>통화는 파일명 + 전사문
+        alt 통화 전사가 아직 안 끝남
+            W->>S: pending 으로 되돌리고 WORKER_WAIT_SECONDS 뒤로 미룸 (시도 횟수 안 씀)
+        else 판별할 텍스트 없음 (전사 실패한 통화, 이미지만 있는 MMS)
             W->>S: status=kept (놓치지 않게 일단 남김)
         else 텍스트 있음
             W->>W: 프롬프트 읽기 (prompts/{source}.toml)

@@ -93,6 +93,16 @@ def retry_later(event_id: int, error: str, delay: float) -> None:
         )
 
 
+def wait(event_id: int, delay: float) -> None:
+    """아직 판별할 준비가 안 됐다(통화 전사 중). 시도 횟수를 쓰지 않고 뒤로 미룬다."""
+    with closing(connect()) as conn:
+        conn.execute(
+            "UPDATE events SET status = 'pending', attempts = attempts - 1, available_at = ?, updated_at = ?"
+            " WHERE id = ?",
+            (now(delay), now(), event_id),
+        )
+
+
 def reset_stale() -> int:
     """워커가 처리 도중 죽었을 때 남은 processing 을 되돌린다. 워커는 1개만 뜬다는 전제."""
     with closing(connect()) as conn:

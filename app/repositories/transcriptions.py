@@ -55,3 +55,10 @@ def unfinished_ids() -> list[int]:
         rows = conn.execute(
             "SELECT id FROM transcriptions WHERE status IN ('queued', 'running') ORDER BY id").fetchall()
         return [r["id"] for r in rows]
+
+
+def latest_for(input_path: str) -> sqlite3.Row | None:
+    """이 파일의 가장 최근 전사 작업."""
+    with closing(connect()) as conn:
+        return conn.execute("SELECT * FROM transcriptions WHERE input_path = ? ORDER BY id DESC LIMIT 1",
+                            (input_path,)).fetchone()
