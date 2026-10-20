@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     # buzz CLI. 데스크톱 .deb 에 들어 있는 바이너리를 꺼내 둔다 (README "Buzz 봇" 참고).
     buzz_cli_path: Path = Path.home() / ".local" / "bin" / "buzz"
     buzz_poll_seconds: float = Field(default=5, gt=0)
+    # 봇 프로필 이름. 앱의 DM 목록에 이 이름이 보인다. 봇이 시작할 때 설정한다.
+    buzz_bot_name: str = "auto_mobile"
 
     # LLM 위키 (app/jobs/wiki_builder.py). kept 이벤트를 Claude Code(헤드리스)가 data/wiki 의 마크다운으로 정리한다.
     # 위키 관리 규칙은 WIKI_SCHEMA_PATH. claude 는 로그인돼 있어야 한다(automan 계정의 ~/.claude).

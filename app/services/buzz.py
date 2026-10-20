@@ -46,6 +46,10 @@ def whoami() -> dict:
     return run("users", "get")
 
 
+def set_name(name: str) -> None:
+    run("users", "set-profile", "--name", name)
+
+
 def open_dm(pubkey_hex: str) -> str:
     """DM 채널 UUID. 이미 있으면 같은 채널을 돌려준다."""
     return run("dms", "open", "--pubkey", pubkey_hex)["dm_id"]

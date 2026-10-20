@@ -107,6 +107,7 @@ MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "앱 비
 BUZZ_RELAY_URL=https://srv2036064.hstgr.cloud:8443   # 자체 운영 relay (deploy/buzz-relay)
 BUZZ_PRIVATE_KEY=<봇 키, hex 또는 nsec>
 BUZZ_OWNER_PUBKEY=<사용자 npub>
+BUZZ_BOT_NAME=auto_mobile        # 앱 DM 목록에 보이는 봇 이름. 봇이 시작할 때 프로필에 넣는다
 ```
 
 - relay 와는 공식 `buzz` CLI 로 주고받는다. CLI 는 데스크톱 릴리스 `.deb` 에 들어 있다:

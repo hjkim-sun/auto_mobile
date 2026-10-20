@@ -75,6 +75,10 @@ def run(once: bool = False) -> None:
     init_db()
     if not settings.buzz_relay_url or not settings.buzz_owner_pubkey:
         raise SystemExit("BUZZ_RELAY_URL and BUZZ_OWNER_PUBKEY are required")
+    try:
+        buzz.set_name(settings.buzz_bot_name)
+    except buzz.BuzzError:
+        logger.exception("could not set bot profile name")
     while True:
         try:
             channel = dm_channel()
