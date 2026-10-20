@@ -7,6 +7,7 @@
   버린 [n]          최근 버린 것 n건. 판별이 놓친 게 없는지 볼 때
   상태              상태별 건수
   #123              이벤트 123 의 본문 (통화는 전사)
+  위키 질문          LLM 위키에 묻기 (app/services/wiki.py)
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from datetime import datetime, time, timezone
 from app.core.config import get_settings
 from app.db.session import connect
 from app.repositories import events
+from app.services import wiki
 from app.services.render import render
 
 SOURCES = {"문자": "message", "메일": "email", "통화": "call"}
@@ -30,7 +32,8 @@ HELP = """명령
 • 문자 / 메일 / 통화 [n] — 종류별 최근 남긴 것 (기본 5건)
 • 버린 [n] — 최근 버린 것
 • 상태 — 상태별 건수
-• #번호 — 원문 보기 (통화는 전사)"""
+• #번호 — 원문 보기 (통화는 전사)
+• 위키 질문 — 위키에 묻기 (예: 위키 홍길동과 약속 언제야?)"""
 
 
 def _local(ts: str) -> str:
@@ -115,6 +118,11 @@ def handle(command: str) -> str:
         return _listing(f"최근 {word}", _recent("status = 'kept' AND source = ?", [SOURCES[word]], n))
     if word == "버린":
         return _listing("최근 버린 것", _recent("status = 'discarded'", [], n))
+    if word == "위키" and rest.strip():
+        try:
+            return wiki.ask(rest.strip())[:DETAIL_CHARS]
+        except wiki.WikiError as e:
+            return f"위키 질문 실패: {e}"
     if word == "상태":
         counts = events.status_counts()
         return "\n".join(f"{k}: {v}" for k, v in sorted(counts.items())) or "이벤트 없음"

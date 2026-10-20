@@ -115,13 +115,45 @@ BUZZ_OWNER_PUBKEY=<사용자 npub>
 - `python -m app.jobs.buzz_bot --whoami` 로 연결을 확인하고, `--invite` 로 사용자용 초대 링크(7일, 1회용)를 만든다.
   폰 Buzz 앱 첫 화면의 "Enter a community link" 에 그 링크를 넣는다.
 - 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
-- `BUZZ_OWNER_PUBKEY` 와의 DM 만 읽고, 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`.
+- `BUZZ_OWNER_PUBKEY` 와의 DM 만 읽고, 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`.
+
+## LLM 위키
+
+kept 판별된 문자·메일·통화를 Claude Code 가 `data/wiki/` 의 마크다운 위키로 정리한다.
+원본은 그대로 두고, LLM 이 자료 요약과 사람·기관·주제 페이지, 일정, 목록을 쓰고 고친다.
+`app/jobs/wiki_builder.py` 가 `WIKI_POLL_SECONDS`(기본 600초)마다 아직 넣지 않은 kept 이벤트를 `WIKI_BATCH_SIZE`(기본 5)건씩 넘긴다.
+
+```bash
+uv run python -m app.jobs.wiki_builder           # 계속 돌며 새 kept 를 넣는다 (반드시 1개만, data/wiki.lock)
+uv run python -m app.jobs.wiki_builder --once    # 쌓인 것만 넣고 종료. 처음엔 기존 kept 를 모두 넣는다
+uv run python -m app.jobs.wiki_builder --ask "홍길동과 약속 언제야?"
+uv run python -m app.jobs.wiki_builder --lint    # 깨진 링크, 중복 페이지, 모순, 지난 일정 정리
+```
+
+- 위키를 쓰는 규칙은 `prompts/wiki.md`(`WIKI_SCHEMA_PATH`)에 있다. 페이지 구조나 쓰는 방식을 바꾸려면 이 파일을 고친다.
+- `claude -p --restricted --safe-mode` 로 띄운다. Bash 가 없고 파일 도구(`Read,Write,Edit,Glob,Grep`)는 `data/wiki` 안에서만 쓴다.
+  문자·메일 본문은 `<source>` 태그로 감싸 데이터로만 다루게 한다.
+- `claude` 는 automan 계정에 로그인돼 있어야 한다(`WIKI_CLAUDE_PATH`, 기본 `~/.local/bin/claude`). 모델은 `WIKI_MODEL`(기본 `sonnet`).
+- `data/wiki` 는 따로 git 저장소다(공개 저장소에 올라가지 않는다). 넣을 때마다 커밋하므로 `git -C data/wiki log -p` 로 LLM 이 고친 내용을 보고 되돌릴 수 있다.
+  claude 가 실패하면 고치다 만 파일을 마지막 커밋으로 되돌리고, 다음 주기에 같은 자료를 다시 넣는다.
+- 통화는 전사가 끝난 뒤에 넣는다. 넣은 이벤트는 `wiki_ingests` 테이블에 남는다.
+- Buzz DM 으로 `위키 <질문>` 을 보내면 위키를 읽고 답한다.
+
+```
+data/wiki/
+  index.md        모든 페이지 목록
+  log.md          작업 기록 (프로그램이 적는다)
+  schedule.md     일정, 약속, 마감, 할 일
+  sources/{id}.md 자료 1건 요약 (id 는 events.id)
+  people/  orgs/  topics/
+```
 
 ## 저장 경로 (`DATA_DIR`, 기본 `data/`)
 
 ```
 data/
   events.db
+  wiki/                   LLM 위키 (아래 "LLM 위키")
   raw/
     calls/YYYYMMDD/{sha256 앞 12자}_{파일명}      YYYYMMDD 는 파일명 속 녹음 시각(…_yyMMdd_HHmmss) 기준, 없으면 받은 날
     messages/YYYYMMDD/{sms|mms}-{id}.json     YYYYMMDD 는 문자 자체의 date 기준 (한국 시간)
@@ -149,5 +181,6 @@ prompts/                판별 프롬프트 (이벤트 종류별 .toml)
   jobs/worker.py        판별 워커
   jobs/mail_poller.py   IMAP 메일 폴러
   jobs/buzz_bot.py      Buzz 알림·명령 봇
+  jobs/wiki_builder.py  LLM 위키 빌더
 tests/
 ```

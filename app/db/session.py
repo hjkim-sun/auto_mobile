@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS notifications (   -- Buzz 로 알린 이벤트. 한 �
     event_id     INTEGER PRIMARY KEY,
     sent_at      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS wiki_ingests (    -- 위키에 넣은 이벤트. 한 이벤트는 한 번만 넣는다
+    event_id     INTEGER PRIMARY KEY,
+    ingested_at  TEXT NOT NULL
+);
 """
 
 

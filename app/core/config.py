@@ -76,6 +76,16 @@ class Settings(BaseSettings):
     buzz_cli_path: Path = Path.home() / ".local" / "bin" / "buzz"
     buzz_poll_seconds: float = Field(default=5, gt=0)
 
+    # LLM 위키 (app/jobs/wiki_builder.py). kept 이벤트를 Claude Code(헤드리스)가 data/wiki 의 마크다운으로 정리한다.
+    # 위키 관리 규칙은 WIKI_SCHEMA_PATH. claude 는 로그인돼 있어야 한다(automan 계정의 ~/.claude).
+    wiki_claude_path: Path = Path.home() / ".local" / "bin" / "claude"
+    wiki_model: str = "sonnet"
+    wiki_schema_path: Path = Path("prompts/wiki.md")
+    # claude 1회 호출에 넣는 자료 수
+    wiki_batch_size: int = Field(default=5, ge=1)
+    wiki_poll_seconds: float = Field(default=600, gt=0)
+    wiki_timeout_seconds: float = Field(default=900, gt=0)
+
     @field_validator("mail_accounts")
     @classmethod
     def _unique_account_names(cls, v: list[MailAccountConfig]) -> list[MailAccountConfig]:
@@ -95,6 +105,10 @@ class Settings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self.data_dir / "events.db"
+
+    @property
+    def wiki_dir(self) -> Path:
+        return self.data_dir / "wiki"
 
 
 @lru_cache
