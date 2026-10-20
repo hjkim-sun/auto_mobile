@@ -7,16 +7,10 @@ import sqlite3
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.repositories import events, transcriptions
+from app.repositories import transcriptions
 from app.services.email_parse import load_parsed
 
 MAX_STATE_CHARS = 12000
-# 통화 이벤트가 생기고 이 시간이 지나도 전사 작업이 없으면 전사 없이 판별한다.
-TRANSCRIPT_GRACE_SECONDS = 120
-
-
-class NotReady(Exception):
-    """아직 판별할 수 없다(통화 전사 중). 워커가 나중에 다시 꺼낸다."""
 
 
 def render(event: sqlite3.Row) -> str | None:
@@ -32,16 +26,9 @@ def render(event: sqlite3.Row) -> str | None:
 
 
 def call_transcript(event: sqlite3.Row) -> str | None:
-    """전사가 끝났으면 전사문. 전사 중이면 NotReady, 실패했거나 전사 작업이 없으면 None."""
+    """전사가 끝났으면 전사문, 아니면 None. 통화 이벤트는 전사가 끝난 뒤에야 워커에 넘어온다."""
     job = transcriptions.latest_for(event["raw_path"])
-    if job is None:
-        # API 는 이벤트를 넣은 직후 전사를 접수한다. 그 사이에 꺼냈을 수 있다.
-        if event["created_at"] > events.now(-TRANSCRIPT_GRACE_SECONDS):
-            raise NotReady("transcription not submitted yet")
-        return None
-    if job["status"] in ("queued", "running"):
-        raise NotReady(f"transcription {job['id']} {job['status']}")
-    if job["status"] != "done":
+    if job is None or job["status"] != "done":
         return None
     return (get_settings().data_dir / job["text_path"]).read_text(encoding="utf-8")
 

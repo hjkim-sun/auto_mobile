@@ -23,7 +23,7 @@ sequenceDiagram
 
     Note over C,S: 1. 수신: 저장하고 바로 응답한다
     C->>A: POST /v1/ingest/messages 또는 /calls<br/>(Authorization: Bearer 토큰)
-    A->>S: 원본 파일 저장, events 행 추가 (status=pending)
+    A->>S: 원본 파일 저장, events 행 추가<br/>(status=pending, 통화는 status=transcribing)
     A-->>C: 201 {event_id}<br/>(이미 받은 데이터면 저장 없이 200)
 
     opt MMS 첨부
@@ -35,6 +35,7 @@ sequenceDiagram
         A->>T: 전사 접수 (응답에 transcription_id 포함)
         T->>T: Whisper 전사 + sherpa-onnx 화자 분리(2명)<br/>구간마다 화자1/화자2 를 붙임
         T->>S: 전사 결과 저장<br/>(data/transcripts/calls/YYYYMMDD/*.txt, *.json)
+        T->>S: 통화 이벤트 status=transcribing → pending<br/>(전사가 실패해도 넘긴다)
     end
 
     Note over M,S: 1-1. 메일 수신: 폴러가 IMAP 에서 가져온다
@@ -47,11 +48,9 @@ sequenceDiagram
 
     Note over S,J: 2. 판별: 워커가 큐에서 하나씩 꺼낸다
     loop 3초마다
-        W->>S: pending이고 available_at이 지난 이벤트 1건 꺼냄 (status=processing)
+        W->>S: pending이고 available_at이 지난 이벤트 1건 꺼냄 (status=processing)<br/>전사 중인 통화(transcribing)는 꺼내지 않음
         W->>W: 판별용 텍스트 만들기 (render.py)<br/>통화는 파일명 + 전사문
-        alt 통화 전사가 아직 안 끝남
-            W->>S: pending 으로 되돌리고 WORKER_WAIT_SECONDS 뒤로 미룸 (시도 횟수 안 씀)
-        else 판별할 텍스트 없음 (전사 실패한 통화, 이미지만 있는 MMS)
+        alt 판별할 텍스트 없음 (전사 실패한 통화, 이미지만 있는 MMS)
             W->>S: status=kept (놓치지 않게 일단 남김)
         else 텍스트 있음
             W->>W: 프롬프트 읽기 (prompts/{source}.toml)

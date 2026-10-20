@@ -19,7 +19,7 @@ from app.services.email_parse import load_parsed
 
 router = APIRouter(prefix="/v1/verdicts", tags=["verdicts"], dependencies=[Depends(require_ingest_token)])
 
-Status = Literal["pending", "processing", "kept", "discarded", "failed"]
+Status = Literal["transcribing", "pending", "processing", "kept", "discarded", "failed"]
 
 
 def _common(row: sqlite3.Row) -> dict:

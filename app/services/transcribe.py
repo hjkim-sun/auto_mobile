@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.repositories import transcriptions
+from app.repositories import events, transcriptions
 from app.services.ingest import IngestError
 
 log = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ def submit(input_path: str, output_dir: str, language: str | None) -> int:
 
 
 def resume_unfinished() -> None:
+    events.release_orphaned_transcribing()
     for job_id in transcriptions.unfinished_ids():
         _enqueue(job_id)
 
@@ -152,6 +153,8 @@ def _run(job_id: int) -> None:
         transcriptions.fail(job_id, f"{type(exc).__name__}: {exc}")
     else:
         transcriptions.finish(job_id, text_path, duration)
+    # 통화 이벤트였다면 이제 워커가 전사문으로 판별한다 (실패했으면 전사 없이)
+    events.release_transcribed(job["input_path"])
 
 
 def transcribe_file(input_path: str, output_dir: str, language: str | None) -> tuple[str, float]:

@@ -23,7 +23,7 @@ from app.core.config import get_settings
 from app.db.session import connect
 from app.repositories import calendar_items, events
 from app.services import calendar, wiki
-from app.services.render import NotReady, call_transcript, render
+from app.services.render import call_transcript, render
 
 SOURCES = {"문자": "message", "메일": "email", "통화": "call"}
 LABELS = {"message": "문자", "email": "메일", "call": "통화"}
@@ -64,16 +64,9 @@ def _sender(value: str) -> str:
     return m.group(1) if m else value
 
 
-def transcript(event: sqlite3.Row) -> str | None:
-    try:
-        return call_transcript(event)
-    except NotReady:
-        return None
-
-
 def body(event: sqlite3.Row) -> str:
     if event["source"] == "call":
-        return transcript(event) or "(전사 중이거나 전사 결과가 없음)"
+        return call_transcript(event) or "(전사 중이거나 전사 결과가 없음)"
     return render(event) or "(본문 없음)"
 
 

@@ -22,14 +22,17 @@ def now(offset_seconds: float = 0) -> str:
 
 
 def insert_event(source: str, dedup_key: str, payload: dict, raw_path: str | None = None,
-                 delay: float = 0) -> tuple[int, bool]:
-    """새 이벤트면 (id, True), 이미 받은 것이면 (기존 id, False)."""
+                 delay: float = 0, status: str = "pending") -> tuple[int, bool]:
+    """새 이벤트면 (id, True), 이미 받은 것이면 (기존 id, False).
+
+    통화는 status=transcribing 으로 넣어 워커가 꺼내지 않게 하고, 전사가 끝나면 release_transcribed 로 푼다.
+    """
     ts = now()
     with closing(connect()) as conn:
         row = conn.execute(
-            "INSERT INTO events (source, dedup_key, payload, raw_path, available_at, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dedup_key) DO NOTHING RETURNING id",
-            (source, dedup_key, json.dumps(payload, ensure_ascii=False), raw_path, now(delay), ts, ts),
+            "INSERT INTO events (source, dedup_key, payload, raw_path, status, available_at, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dedup_key) DO NOTHING RETURNING id",
+            (source, dedup_key, json.dumps(payload, ensure_ascii=False), raw_path, status, now(delay), ts, ts),
         ).fetchone()
         if row:
             return row["id"], True
@@ -93,14 +96,25 @@ def retry_later(event_id: int, error: str, delay: float) -> None:
         )
 
 
-def wait(event_id: int, delay: float) -> None:
-    """아직 판별할 준비가 안 됐다(통화 전사 중). 시도 횟수를 쓰지 않고 뒤로 미룬다."""
+def release_transcribed(raw_path: str) -> None:
+    """전사가 끝났거나 실패한 통화를 판별 대기열에 넣는다."""
     with closing(connect()) as conn:
         conn.execute(
-            "UPDATE events SET status = 'pending', attempts = attempts - 1, available_at = ?, updated_at = ?"
-            " WHERE id = ?",
-            (now(delay), now(), event_id),
+            "UPDATE events SET status = 'pending', available_at = ?, updated_at = ?"
+            " WHERE raw_path = ? AND status = 'transcribing'",
+            (now(), now(), raw_path),
         )
+
+
+def release_orphaned_transcribing() -> int:
+    """전사 작업이 없는 transcribing 통화를 푼다. API 가 이벤트를 넣고 전사를 접수하기 전에 죽은 경우."""
+    with closing(connect()) as conn:
+        return conn.execute(
+            "UPDATE events SET status = 'pending', available_at = ?, updated_at = ? WHERE status = 'transcribing'"
+            " AND NOT EXISTS (SELECT 1 FROM transcriptions t WHERE t.input_path = events.raw_path"
+            "                 AND t.status IN ('queued', 'running'))",
+            (now(), now()),
+        ).rowcount
 
 
 def reset_stale() -> int:

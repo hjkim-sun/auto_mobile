@@ -13,7 +13,6 @@ from app.core.config import get_settings
 from app.db.session import init_db
 from app.repositories import events
 from app.services.classify import classify_event
-from app.services.render import NotReady
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +31,6 @@ def run(once: bool = False) -> None:
             continue
         try:
             status, verdict = classify_event(event)
-        except NotReady as e:
-            events.wait(event["id"], settings.worker_wait_seconds)
-            logger.debug("event %d not ready: %s", event["id"], e)
-            continue
         except Exception as e:
             logger.exception("event %d failed (attempt %d)", event["id"], event["attempts"])
             if event["attempts"] >= settings.worker_max_attempts:

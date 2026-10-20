@@ -73,9 +73,10 @@ def _existing(dedup_key: str, tmp: Path) -> tuple[int, bool] | None:
     return event_id, False
 
 
-def _register(source: str, dedup_key: str, payload: dict, raw_path: Path, delay: float = 0) -> tuple[int, bool]:
+def _register(source: str, dedup_key: str, payload: dict, raw_path: Path, delay: float = 0,
+              status: str = "pending") -> tuple[int, bool]:
     rel = str(raw_path.relative_to(get_settings().data_dir))
-    return events.insert_event(source, dedup_key, payload, rel, delay)
+    return events.insert_event(source, dedup_key, payload, rel, delay, status)
 
 
 def format_date(value: object) -> str | None:
@@ -117,7 +118,8 @@ async def ingest_call(stream: AsyncIterator[bytes], filename: str | None,
     path.parent.mkdir(exist_ok=True)
     tmp.replace(path)
     payload = {"filename": name, "size": size, "sha256": sha, "content_type": content_type}
-    return _register("call", key, payload, path)
+    # 전사가 끝나야 판별할 수 있다. 전사 스레드가 끝날 때 pending 으로 바꾼다.
+    return _register("call", key, payload, path, status="transcribing")
 
 
 def ingest_message(body: bytes) -> tuple[int, bool]:
