@@ -3,8 +3,16 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class MailAccountConfig(BaseModel):
+    # events.payload.account 와 mail_cursors 키. 계정마다 달라야 한다.
+    name: str = Field(pattern=r"^[a-z0-9_.-]+$")
+    user: str
+    password: SecretStr
+    host: str = "imap.naver.com"
 
 
 class Settings(BaseSettings):
@@ -31,11 +39,10 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = Field(default=3.0, gt=0)
     worker_max_attempts: int = Field(default=5, ge=1)
 
-    # 메일 폴러 (app/jobs/mail_poller.py). 네이버는 메일 환경설정에서 IMAP 을 켜고,
-    # 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다. user 가 비어 있으면 그 계정은 건너뛴다.
-    naver_imap_user: str = ""
-    naver_imap_password: SecretStr = SecretStr("")
-    naver_imap_host: str = "imap.naver.com"
+    # 메일 폴러 (app/jobs/mail_poller.py). JSON 목록으로 넣는다:
+    # MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "비밀번호"}, ...]'
+    # 네이버는 메일 환경설정에서 IMAP 을 켜고, 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다.
+    mail_accounts: list[MailAccountConfig] = []
     mail_poll_seconds: float = Field(default=300, gt=0)
     # 처음 폴링하거나 UIDVALIDITY 가 바뀌었을 때 며칠 전 메일부터 가져올지
     mail_backfill_days: int = Field(default=1, ge=0)
@@ -45,6 +52,14 @@ class Settings(BaseSettings):
     whisper_compute_type: str = "int8"
     whisper_cpu_threads: int = Field(default=2, ge=1)
     whisper_language: str = "ko"
+
+    @field_validator("mail_accounts")
+    @classmethod
+    def _unique_account_names(cls, v: list[MailAccountConfig]) -> list[MailAccountConfig]:
+        names = [a.name for a in v]
+        if len(names) != len(set(names)):
+            raise ValueError("mail account names must be unique")
+        return v
 
     @property
     def raw_dir(self) -> Path:

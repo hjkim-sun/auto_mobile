@@ -69,14 +69,20 @@ Caddy 를 거친 요청(X-Forwarded-For 가 붙은 요청)에는 404 를 준다.
 
 ## 메일 폴러
 
-`NAVER_IMAP_USER`, `NAVER_IMAP_PASSWORD` 를 설정하면 `imap.naver.com` 의 받은메일함(INBOX)을
-`MAIL_POLL_SECONDS`(기본 300초)마다 확인해 새 메일을 `account=naver` 로 넣는다.
-네이버 메일 환경설정 → POP3/IMAP 설정에서 IMAP 을 켜야 하고, 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다.
+`MAIL_ACCOUNTS` 에 넣은 계정마다 받은메일함(INBOX)을 `MAIL_POLL_SECONDS`(기본 300초)마다 확인해 새 메일을 넣는다.
 
+```
+MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "앱 비밀번호"},
+                {"name": "naver-sub", "user": "아이디2", "password": "앱 비밀번호2"}]'
+```
+
+- `name` 은 판별 결과의 `account` 로 남고 계정마다 달라야 한다(영문 소문자, 숫자, `_.-`). `host` 를 생략하면 `imap.naver.com`.
+- 네이버 메일 환경설정 → POP3/IMAP 설정에서 IMAP 을 켜야 하고, 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다.
+- 같은 메일이 두 계정에 다 오면 Message-ID 로 한 번만 저장되고, 먼저 가져온 계정 이름이 남는다.
 - 읽기 전용으로 열고 `BODY.PEEK` 로 가져오므로 메일이 읽음 처리되지 않는다.
 - 마지막으로 가져온 UID 를 `mail_cursors` 테이블에 남겨 다음 폴링은 그 뒤부터 가져온다.
 - 처음이거나 서버의 UIDVALIDITY 가 바뀌면 `MAIL_BACKFILL_DAYS`(기본 1)일 전부터 다시 가져온다. 중복은 Message-ID 로 걸러진다.
-- 인증 실패나 네트워크 오류는 로그만 남기고 다음 주기에 다시 시도한다.
+- 인증 실패나 네트워크 오류는 로그만 남기고 다음 주기에 다시 시도한다. 한 계정이 실패해도 다른 계정은 계속 가져온다.
 
 ## 저장 경로 (`DATA_DIR`, 기본 `data/`)
 

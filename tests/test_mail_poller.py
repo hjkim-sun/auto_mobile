@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.core.config import get_settings
@@ -14,14 +16,19 @@ def eml(n: int) -> bytes:
             f"본문 {n}\r\n").encode()
 
 
+def set_accounts(monkeypatch, *accounts):
+    monkeypatch.setenv("MAIL_ACCOUNTS", json.dumps(list(accounts)))
+    get_settings.cache_clear()
+
+
 class FakeIMAP:
-    """imaplib.IMAP4_SSL 대역. mailbox 는 {uid: 원본}."""
-    mailbox: dict[int, bytes] = {}
+    """imaplib.IMAP4_SSL 대역. boxes 는 {로그인 user: {uid: 원본}}."""
+    boxes: dict[str, dict[int, bytes]] = {}
     uidvalidity = 100
     searches: list[tuple] = []
 
     def __init__(self, host, timeout=None):
-        self.state = "NONAUTH"
+        self.mailbox: dict[int, bytes] = {}
 
     def __enter__(self):
         return self
@@ -32,6 +39,7 @@ class FakeIMAP:
     def login(self, user, password):
         if password != "secret":
             raise mail_poller.imaplib.IMAP4.error("auth failed")
+        self.mailbox = self.boxes[user]
 
     def select(self, mailbox, readonly=False):
         assert readonly
@@ -58,11 +66,9 @@ class FakeIMAP:
 
 @pytest.fixture
 def imap(monkeypatch):
-    monkeypatch.setenv("NAVER_IMAP_USER", "hong")
-    monkeypatch.setenv("NAVER_IMAP_PASSWORD", "secret")
-    get_settings.cache_clear()
+    set_accounts(monkeypatch, {"name": "naver", "user": "hong", "password": "secret"})
     monkeypatch.setattr(mail_poller.imaplib, "IMAP4_SSL", FakeIMAP)
-    FakeIMAP.mailbox = {3: eml(3), 7: eml(7)}
+    FakeIMAP.boxes = {"hong": {3: eml(3), 7: eml(7)}, "kim": {}}
     FakeIMAP.uidvalidity = 100
     FakeIMAP.searches = []
     init_db()
@@ -80,7 +86,7 @@ def test_poll_ingests_new_mail_and_moves_cursor(imap):
     assert imap.searches[1] == ("UID 8:*",)
     assert len(events.list_events("email")) == 2
 
-    imap.mailbox[9] = eml(9)
+    imap.boxes["hong"][9] = eml(9)
     mail_poller.run(once=True)
     rows = events.list_events("email")
     assert len(rows) == 3
@@ -91,22 +97,42 @@ def test_poll_ingests_new_mail_and_moves_cursor(imap):
 def test_uidvalidity_change_backfills_without_duplicates(imap):
     mail_poller.run(once=True)
     imap.uidvalidity = 200
-    imap.mailbox = {1: eml(3), 2: eml(7)}
+    imap.boxes["hong"] = {1: eml(3), 2: eml(7)}
     mail_poller.run(once=True)
     assert imap.searches[-1][0] == "SINCE"
     assert len(events.list_events("email")) == 2
     assert mail_cursors.get("naver", "INBOX") == (200, 2)
 
 
-def test_auth_failure_is_logged_and_skipped(imap, monkeypatch, caplog):
-    monkeypatch.setenv("NAVER_IMAP_PASSWORD", "wrong")
-    get_settings.cache_clear()
+def test_multiple_accounts_have_separate_cursors(imap, monkeypatch):
+    set_accounts(monkeypatch,
+                 {"name": "naver", "user": "hong", "password": "secret"},
+                 {"name": "naver-kim", "user": "kim", "password": "secret"})
+    imap.boxes["kim"] = {5: eml(5)}
+    mail_poller.run(once=True)
+    accounts = sorted(json.loads(e["payload"])["account"] for e in events.list_events("email"))
+    assert accounts == ["naver", "naver", "naver-kim"]
+    assert mail_cursors.get("naver", "INBOX") == (100, 7)
+    assert mail_cursors.get("naver-kim", "INBOX") == (100, 5)
+
+
+def test_auth_failure_does_not_block_other_accounts(imap, monkeypatch, caplog):
+    set_accounts(monkeypatch,
+                 {"name": "naver", "user": "hong", "password": "wrong"},
+                 {"name": "naver-kim", "user": "kim", "password": "secret"})
+    imap.boxes["kim"] = {5: eml(5)}
     mail_poller.run(once=True)
     assert "polling naver failed" in caplog.text
     assert mail_cursors.get("naver", "INBOX") is None
+    assert mail_cursors.get("naver-kim", "INBOX") == (100, 5)
 
 
-def test_no_account_configured(monkeypatch):
-    monkeypatch.setenv("NAVER_IMAP_USER", "")
-    get_settings.cache_clear()
+def test_account_names_must_be_unique(monkeypatch):
+    acct = {"name": "naver", "user": "hong", "password": "secret"}
+    set_accounts(monkeypatch, acct, acct)
+    with pytest.raises(ValueError):
+        get_settings()
+
+
+def test_no_account_configured():
     assert mail_poller.configured_accounts() == []

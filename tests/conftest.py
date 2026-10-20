@@ -12,6 +12,7 @@ def settings_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MESSAGE_SETTLE_SECONDS", "0")
     monkeypatch.setenv("INGEST_TOKEN", "")
     monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
+    monkeypatch.setenv("MAIL_ACCOUNTS", "[]")   # 실제 .env 의 메일 계정에 접속하지 않게
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

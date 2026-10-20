@@ -8,7 +8,8 @@ automan 계정은 unit 파일과 sudoers를 고칠 수 없으므로 아래 작�
 ## 먼저 할 일 (root 아님)
 
 1. 네이버 메일 환경설정 → POP3/IMAP 설정에서 IMAP을 켠다. 2단계 인증을 쓰면 애플리케이션 비밀번호를 발급한다.
-2. `.env`에 `NAVER_IMAP_USER`, `NAVER_IMAP_PASSWORD`를 넣는다.
+   폴링할 네이버 계정마다 각각 한다.
+2. `.env`에 `MAIL_ACCOUNTS`를 넣는다(형식은 README의 "메일 폴러" 참고). 계정마다 `name`을 다르게 준다.
 3. `uv run python -m app.jobs.mail_poller --once`로 한 번 돌려 로그인과 수신이 되는지 확인한다.
 
 ## root 작업

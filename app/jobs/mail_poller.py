@@ -35,12 +35,8 @@ class MailAccount:
 
 
 def configured_accounts() -> list[MailAccount]:
-    s = get_settings()
-    accounts = []
-    if s.naver_imap_user:
-        accounts.append(MailAccount("naver", s.naver_imap_host, s.naver_imap_user,
-                                    s.naver_imap_password.get_secret_value()))
-    return accounts
+    return [MailAccount(a.name, a.host, a.user, a.password.get_secret_value())
+            for a in get_settings().mail_accounts]
 
 
 def _check(result: tuple[str, list]) -> list:
@@ -103,7 +99,7 @@ def run(once: bool = False) -> None:
     init_db()
     accounts = configured_accounts()
     if not accounts:
-        logger.error("no mail account configured (NAVER_IMAP_USER)")
+        logger.error("no mail account configured (MAIL_ACCOUNTS)")
     while True:
         for account in accounts:
             try:
