@@ -43,6 +43,16 @@ CREATE TABLE IF NOT EXISTS transcriptions (
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS buzz_state (      -- Buzz 봇이 기억하는 값 (DM 채널, 읽은 위치 등)
+    key          TEXT PRIMARY KEY,
+    value        TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (   -- Buzz 로 알린 이벤트. 한 이벤트는 한 번만 알린다
+    event_id     INTEGER PRIMARY KEY,
+    sent_at      TEXT NOT NULL
+);
 """
 
 

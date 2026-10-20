@@ -98,6 +98,23 @@ MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "앱 비
   네이버는 UIDVALIDITY 를 항상 0 으로 준다. 그래도 UID 는 계속 늘어나므로 커서는 그대로 동작한다.
 - 인증 실패나 네트워크 오류는 로그만 남기고 다음 주기에 다시 시도한다. 한 계정이 실패해도 다른 계정은 계속 가져온다.
 
+## Buzz 봇
+
+[Buzz](https://github.com/block/buzz)(Block 의 Nostr 기반 메신저)로 kept 판별된 문자·메일·통화를 DM 으로 알리고, DM 명령에 답한다.
+`app/jobs/buzz_bot.py` 가 `BUZZ_POLL_SECONDS`(기본 5초)마다 알릴 것을 보내고 사용자의 새 DM 을 읽는다.
+
+```
+BUZZ_RELAY_URL=https://<커뮤니티>.communities.buzz.xyz
+BUZZ_PRIVATE_KEY=<봇 키, hex 또는 nsec>
+BUZZ_OWNER_PUBKEY=<사용자 npub>
+```
+
+- relay 와는 공식 `buzz` CLI 로 주고받는다. CLI 는 데스크톱 릴리스 `.deb` 에 들어 있다:
+  `dpkg-deb -x Buzz_<버전>_amd64.deb x && cp x/usr/bin/buzz ~/.local/bin/` (`BUZZ_CLI_PATH`, 기본 `~/.local/bin/buzz`)
+- 봇의 npub 을 커뮤니티 멤버로 초대해야 relay 가 받아 준다. `python -m app.jobs.buzz_bot --whoami` 로 연결을 확인한다.
+- 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
+- `BUZZ_OWNER_PUBKEY` 와의 DM 만 읽고, 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`.
+
 ## 저장 경로 (`DATA_DIR`, 기본 `data/`)
 
 ```
@@ -129,5 +146,6 @@ app/
 prompts/                판별 프롬프트 (이벤트 종류별 .toml)
   jobs/worker.py        판별 워커
   jobs/mail_poller.py   IMAP 메일 폴러
+  jobs/buzz_bot.py      Buzz 알림·명령 봇
 tests/
 ```

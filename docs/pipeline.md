@@ -15,6 +15,8 @@ sequenceDiagram
     participant S as 저장소<br/>(data/raw, events.db)
     participant W as 워커<br/>(app/jobs/worker.py)
     participant J as Jev<br/>(typesafe.ai)
+    participant B as Buzz 봇<br/>(app/jobs/buzz_bot.py)
+    participant U as 사용자<br/>(Buzz 앱 DM)
 
     Note over C,S: 1. 수신: 저장하고 바로 응답한다
     C->>A: POST /v1/ingest/messages 또는 /calls<br/>(Authorization: Bearer 토큰)
@@ -55,7 +57,17 @@ sequenceDiagram
     end
     Note over W,J: Jev 호출이 실패하면 pending으로 되돌려 재시도하고<br/>5회를 넘기면 failed로 둔다
 
-    Note over C,S: 3. 조회
+    Note over S,U: 3. 알림과 명령: Buzz 봇 (5초마다)
+    loop BUZZ_POLL_SECONDS
+        B->>S: kept 인데 notifications 에 없는 이벤트 조회
+        B->>U: DM 알림 (요약 + 본문 앞부분, 통화는 전사)
+        B->>S: notifications 에 기록
+        U->>B: DM 명령 (오늘, 메일 5, #123 ...)
+        B->>S: 조회
+        B->>U: DM 답장
+    end
+
+    Note over C,S: 4. 조회
     C->>A: GET /v1/verdicts/messages
     A->>S: 판별 결과 조회
     A-->>C: {items, next_before_id}

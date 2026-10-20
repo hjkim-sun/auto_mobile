@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     diarization_num_speakers: int = Field(default=2, ge=0)
     diarization_threshold: float = Field(default=0.5, gt=0)
 
+    # Buzz 봇 (app/jobs/buzz_bot.py). relay URL 이 비어 있으면 봇을 띄우지 않는다.
+    # 봇 신원은 BUZZ_PRIVATE_KEY(hex 또는 nsec). 사용자는 커뮤니티에 이 봇의 npub 을 초대해 둔다.
+    buzz_relay_url: str = ""
+    buzz_private_key: SecretStr = SecretStr("")
+    # 알림을 받고 명령을 내릴 사용자(npub 또는 hex). 봇은 이 사람과의 DM 만 본다.
+    buzz_owner_pubkey: str = ""
+    # buzz CLI. 데스크톱 .deb 에 들어 있는 바이너리를 꺼내 둔다 (README "Buzz 봇" 참고).
+    buzz_cli_path: Path = Path.home() / ".local" / "bin" / "buzz"
+    buzz_poll_seconds: float = Field(default=5, gt=0)
+
     @field_validator("mail_accounts")
     @classmethod
     def _unique_account_names(cls, v: list[MailAccountConfig]) -> list[MailAccountConfig]:
