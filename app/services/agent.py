@@ -51,7 +51,7 @@ def _session(channel: str) -> tuple[str, bool]:
 
 def _run(session_id: str, resume: bool, text: str) -> dict:
     s = get_settings()
-    rules = (REPO / s.agent_prompt_path).read_text(encoding="utf-8")
+    rules = (REPO / s.agent_prompt_path).read_text(encoding="utf-8").replace("{bot_name}", s.buzz_bot_name)
     cmd = [str(s.wiki_claude_path), "-p", "--restricted", "--strict-mcp-config", "--mcp-config", mcp_config(),
            "--tools", TOOLS, "--allowedTools", "mcp__auto_mobile", "--permission-prompts", "none",
            "--output-format", "json", "--model", s.agent_model, "--append-system-prompt", rules]

@@ -50,6 +50,7 @@ def fake_buzz(monkeypatch):
     monkeypatch.setenv("BUZZ_RELAY_URL", "https://example.communities.buzz.xyz")
     monkeypatch.setenv("BUZZ_OWNER_PUBKEY", OWNER_NPUB)
     monkeypatch.setenv("BUZZ_PRIVATE_KEY", BOT_KEY)
+    monkeypatch.setenv("BUZZ_BOT_NAME", "auto_mobile")   # .env 의 실제 봇 이름과 상관없이
     from app.core.config import get_settings
     get_settings.cache_clear()
     init_db()

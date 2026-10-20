@@ -128,12 +128,12 @@ BUZZ_BOT_NAME=auto_mobile        # 앱 DM 목록에 보이는 봇 이름. 봇이
 
 봇은 명령만 받는 프로그램이 아니라 Buzz 에 들어와 있는 에이전트로도 동작한다. 명령이 아닌 말은 이 서버의 Claude Code 가 답하므로 맥이 꺼져 있어도 24시간 답한다.
 
-- DM 에서 명령이 아닌 말, 그리고 봇이 멤버인 채널에서 `@auto_mobile` 로 멘션한 말에 답한다. 채널에서는 그 메시지의 스레드로 답하고, 채널의 최근 대화 10건을 맥락으로 함께 넘긴다.
+- DM 에서 명령이 아닌 말, 그리고 봇이 멤버인 채널에서 `@봇이름`(`BUZZ_BOT_NAME`)으로 멘션한 말에 답한다. 채널에서는 그 메시지의 스레드로 답하고, 채널의 최근 대화 10건을 맥락으로 함께 넘긴다.
 - 답을 만드는 동안 받은 메시지에 👀 반응을 단다. 에이전트는 별도 스레드에서 돌아 알림이 밀리지 않는다.
 - `app/services/agent.py` 가 `claude -p --restricted` 를 위키 디렉토리에서 띄운다. Bash 가 없고 파일 도구는 위키 안만 읽는다. 원본 이벤트와 캘린더는 MCP 서버 `app/jobs/agent_mcp.py` 의 도구(`search_events`, `get_event`, `pending_calendar`, `decide_calendar`, `status_counts`)로만 다룬다. 쓰기는 캘린더 등록/안함뿐이고, 주인이 정한 경우에만 하도록 `prompts/agent.md` 에 적어 두었다.
 - 대화 맥락은 채널마다 claude 세션 하나로 이어 간다. `AGENT_SESSION_HOURS`(기본 6) 동안 말이 없거나 `새대화` 라고 하면 새 세션을 연다.
 - 다른 에이전트(Claude, Codex 등)도 멘션하면 답한다. 에이전트끼리 끝없이 주고받지 않게, 주인이 다시 말할 때까지 `AGENT_PEER_REPLIES`(기본 3)번까지만 답한다. relay 가 닫힌 커뮤니티라 멤버만 말을 걸 수 있다.
-- 다른 채널에서 쓰려면 그 채널에 봇(`auto_mobile`)을 멤버로 넣는다.
+- 다른 채널에서 쓰려면 그 채널에 봇을 멤버로 넣는다. 에이전트가 자기 이름으로 아는 것도 `BUZZ_BOT_NAME` 이다(`prompts/agent.md` 의 `{bot_name}`).
 
 ```
 AGENT_ENABLED=true          # false 면 명령이 아닌 말에 도움말만 보낸다
