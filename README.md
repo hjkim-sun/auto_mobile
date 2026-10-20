@@ -133,9 +133,11 @@ BUZZ_BOT_NAME=auto_mobile        # 앱 DM 목록에 보이는 봇 이름. 봇이
 - `app/services/agent.py` 가 `claude -p --restricted` 를 위키 디렉토리에서 띄운다. Bash 가 없고 파일 도구는 위키 안만 읽는다. 원본 이벤트와 캘린더는 MCP 서버 `app/jobs/agent_mcp.py` 의 도구(`search_events`, `get_event`, `pending_calendar`, `decide_calendar`, `status_counts`)로만 다룬다. 쓰기는 캘린더 등록/안함뿐이고, 주인이 정한 경우에만 하도록 `prompts/agent.md` 에 적어 두었다.
 - 대화 맥락은 채널마다 claude 세션 하나로 이어 간다. `AGENT_SESSION_HOURS`(기본 6) 동안 말이 없거나 `새대화` 라고 하면 새 세션을 연다.
 - 다른 에이전트(Claude, Codex 등)도 멘션하면 답한다. 에이전트끼리 끝없이 주고받지 않게, 주인이 다시 말할 때까지 `AGENT_PEER_REPLIES`(기본 3)번까지만 답한다. relay 가 닫힌 커뮤니티라 멤버만 말을 걸 수 있다.
+- 듣는 채널(`BUZZ_LISTEN_CHANNELS`, 채널 UUID 의 JSON 목록)에서는 주인의 말에 멘션 없이도 답한다. 채널에서 한 말은 채널로, 스레드 안에서 한 말은 그 스레드로 답한다. 주인이 다른 사람이나 에이전트를 `@이름`으로 콕 집어 부른 말에는 끼어들지 않는다. 다른 에이전트의 말에는 여기서도 멘션했을 때만 답한다.
 - 다른 채널에서 쓰려면 그 채널에 봇을 멤버로 넣는다. 에이전트가 자기 이름으로 아는 것도 `BUZZ_BOT_NAME` 이다(`prompts/agent.md` 의 `{bot_name}`).
 
 ```
+BUZZ_LISTEN_CHANNELS='["<채널 UUID>"]'   # buzz channels list 로 찾는다
 AGENT_ENABLED=true          # false 면 명령이 아닌 말에 도움말만 보낸다
 AGENT_MODEL=sonnet
 AGENT_TIMEOUT_SECONDS=300

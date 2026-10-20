@@ -1,6 +1,7 @@
 """Buzz 봇. kept 로 판별된 이벤트를 사용자에게 DM 으로 알리고, 말을 걸면 답한다.
 
 - 주인의 DM 과, 다른 채널에서 봇을 멘션한 말(스레드로 답)에 답한다.
+- 듣는 채널(BUZZ_LISTEN_CHANNELS)에서는 주인의 말에 멘션 없이도 답한다.
 - 명령(app/services/bot.py)은 바로 답하고, 그 밖의 말은 에이전트(app/services/agent.py, Claude Code)가 답한다.
 - 다른 에이전트가 멘션하면 주인이 다시 말할 때까지 AGENT_PEER_REPLIES 번까지만 답한다.
 반드시 1개 프로세스만 띄운다.
@@ -83,21 +84,47 @@ def answer(channel: str) -> int:
     replied = 0
     for msg in _unseen("dm", lambda since: buzz.get_messages(channel, since=since)):
         if msg.get("pubkey") == owner and isinstance(msg.get("content"), str):
-            respond(channel, msg, in_dm=True)
+            respond(channel, msg, reply_to=None, with_history=False)
             replied += 1
     return replied
 
 
 def answer_mentions(dm: str) -> int:
-    """다른 채널에서 봇을 멘션한 말. 스레드로 답한다. DM 은 answer 가 맡는다."""
-    me = bot_pubkey()
+    """다른 채널에서 봇을 멘션한 말. 스레드로 답한다.
+
+    DM 은 answer 가, 듣는 채널(BUZZ_LISTEN_CHANNELS)에서 주인이 한 말은 answer_listening 이 맡는다.
+    """
+    me, owner = bot_pubkey(), buzz_state.get("dm_owner")
+    listening = set(get_settings().buzz_listen_channels)
     replied = 0
     for msg in _unseen("mention", lambda since: buzz.mentions(since)):
         channel = buzz.channel_of(msg)
         if channel in (None, dm) or msg.get("pubkey") == me or not isinstance(msg.get("content"), str):
             continue
-        respond(channel, msg, in_dm=False)
+        if channel in listening and msg.get("pubkey") == owner:
+            continue
+        respond(channel, msg, reply_to=msg.get("id"), with_history=True)
         replied += 1
+    return replied
+
+
+def answer_listening() -> int:
+    """듣는 채널에서는 주인이 한 말에 멘션 없이도 답한다. 다른 사람을 콕 집어 부른 말에는 끼어들지 않는다.
+
+    스레드 안에서 한 말은 그 스레드로, 채널에서 한 말은 채널로 답한다.
+    """
+    me, owner = bot_pubkey(), buzz_state.get("dm_owner")
+    replied = 0
+    for channel in get_settings().buzz_listen_channels:
+        for msg in _unseen(f"listen:{channel}", lambda since: buzz.get_messages(channel, since=since)):
+            if msg.get("pubkey") != owner or msg.get("kind") != 9 or not isinstance(msg.get("content"), str):
+                continue
+            mentioned = {t[1] for t in msg.get("tags", []) if len(t) > 1 and t[0] == "p"}
+            if mentioned and me not in mentioned:
+                continue
+            in_thread = any(t and t[0] == "e" for t in msg.get("tags", []))
+            respond(channel, msg, reply_to=msg.get("id") if in_thread else None, with_history=True)
+            replied += 1
     return replied
 
 
@@ -110,12 +137,11 @@ def strip_mention(text: str) -> str:
     return re.sub(rf"@{name}\b|nostr:npub1[02-9ac-hj-np-z]+", "", text).strip()
 
 
-def respond(channel: str, msg: dict, in_dm: bool) -> None:
+def respond(channel: str, msg: dict, reply_to: str | None, with_history: bool) -> None:
     """명령이면 바로 답하고, 아니면 에이전트에 넘긴다."""
     settings = get_settings()
     is_owner = msg.get("pubkey") == buzz_state.get("dm_owner")
     text = strip_mention(msg["content"])
-    reply_to = None if in_dm else msg.get("id")
     if is_owner:
         buzz_state.put(f"peer_replies:{channel}", 0)
         if text.replace(" ", "") == "새대화":
@@ -135,18 +161,18 @@ def respond(channel: str, msg: dict, in_dm: bool) -> None:
             logger.info("skip peer mention %s in %s (%d replies)", msg.get("id"), channel, count)
             return
         buzz_state.put(f"peer_replies:{channel}", count + 1)
-    dispatch(lambda: agent_reply(channel, msg, text, is_owner, in_dm))
+    dispatch(lambda: agent_reply(channel, msg, text, is_owner, reply_to, with_history))
 
 
-def agent_reply(channel: str, msg: dict, text: str, is_owner: bool, in_dm: bool) -> None:
-    reply_to = None if in_dm else msg.get("id")
+def agent_reply(channel: str, msg: dict, text: str, is_owner: bool, reply_to: str | None,
+                with_history: bool) -> None:
     try:
         buzz.react(msg["id"], "👀")   # 답을 만드는 중이라는 표시
     except buzz.BuzzError:
         logger.warning("could not react to %s", msg.get("id"))
     try:
         names = buzz.user_names([msg["pubkey"]])
-        history = [] if in_dm else channel_history(channel, msg)
+        history = channel_history(channel, msg) if with_history else []
         result = agent.reply(channel, text or "(빈 메시지)", names.get(msg["pubkey"], msg["pubkey"][:8]),
                              is_owner, history)
     except Exception as e:
@@ -203,7 +229,7 @@ def run(once: bool = False) -> None:
             channel = dm_channel()
             if n := notify(channel):
                 logger.info("notified %d events", n)
-            if n := answer(channel) + answer_mentions(channel):
+            if n := answer(channel) + answer_mentions(channel) + answer_listening():
                 logger.info("answered %d messages", n)
         except Exception:
             # relay 가 잠시 안 되면 다음 주기에 다시 시도한다. 알림은 보낸 것만 기록하므로 빠지지 않는다.

@@ -42,7 +42,8 @@ class FakeBuzz:
         return [m for m in self.feed if m["created_at"] >= since]
 
     def get_messages(self, channel, since=None, limit=50):
-        return [m for m in self.inbox if since is None or m["created_at"] >= since]
+        return [m for m in self.inbox if m.get("ch", "dm-1") == channel
+                and (since is None or m["created_at"] >= since)]
 
 
 @pytest.fixture
@@ -50,7 +51,8 @@ def fake_buzz(monkeypatch):
     monkeypatch.setenv("BUZZ_RELAY_URL", "https://example.communities.buzz.xyz")
     monkeypatch.setenv("BUZZ_OWNER_PUBKEY", OWNER_NPUB)
     monkeypatch.setenv("BUZZ_PRIVATE_KEY", BOT_KEY)
-    monkeypatch.setenv("BUZZ_BOT_NAME", "auto_mobile")   # .env 의 실제 봇 이름과 상관없이
+    monkeypatch.setenv("BUZZ_BOT_NAME", "auto_mobile")
+    monkeypatch.setenv("BUZZ_LISTEN_CHANNELS", "[]")   # .env 의 실제 봇 이름과 상관없이
     from app.core.config import get_settings
     get_settings.cache_clear()
     init_db()
@@ -140,7 +142,7 @@ def test_channel_mentions_are_answered_in_thread_with_peer_limit(fake_buzz, fake
     buzz_bot.run(once=True)
     since = buzz_bot.buzz_state.get("mention_since")
     tag = [["h", "room-1"], ["p", BOT]]
-    fake_buzz.inbox = [{"id": "h1", "pubkey": OWNER, "kind": 9, "content": "이번 주 약속 같이 보자",
+    fake_buzz.inbox = [{"id": "h1", "ch": "room-1", "pubkey": OWNER, "kind": 9, "content": "이번 주 약속 같이 보자",
                         "created_at": since - 5}]
     fake_buzz.feed = [
         {"id": "m0", "pubkey": OWNER, "content": "@auto_mobile 새 메일 있어?", "created_at": since,
@@ -186,3 +188,30 @@ def test_bip340_vector_and_key_encoding():
     assert nostr.bech32_encode("npub", bytes.fromhex(OWNER)) == OWNER_NPUB
     nsec = nostr.bech32_encode("nsec", bytes.fromhex(sk))
     assert nostr.public_key(nsec) == nostr.public_key(sk)
+
+
+def test_listening_channel_answers_owner_without_mention(fake_buzz, fake_agent, monkeypatch):
+    monkeypatch.setenv("BUZZ_LISTEN_CHANNELS", '["room-1"]')
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    buzz_bot.run(once=True)
+    since = buzz_bot.buzz_state.get("listen:room-1_since")
+    mention = {"id": "m1", "ch": "room-1", "pubkey": OWNER, "kind": 9, "content": "@auto_mobile 상태",
+               "created_at": since + 1, "tags": [["h", "room-1"], ["p", BOT]]}
+    fake_buzz.inbox = [
+        {"id": "a", "ch": "room-1", "pubkey": OWNER, "kind": 9, "content": "이번 주 약속 뭐 있어?",
+         "created_at": since, "tags": [["h", "room-1"]]},
+        mention,
+        {"id": "b", "ch": "room-1", "pubkey": OWNER, "kind": 9, "content": "@codex 너는 어떻게 생각해?",
+         "created_at": since + 2, "tags": [["h", "room-1"], ["p", PEER]]},            # 다른 에이전트를 부른 말
+        {"id": "c", "ch": "room-1", "pubkey": PEER, "kind": 9, "content": "저는 이렇게 봅니다",
+         "created_at": since + 3, "tags": [["h", "room-1"]]},                         # 멘션 없는 에이전트 말
+        {"id": "d", "ch": "room-1", "pubkey": OWNER, "kind": 9, "content": "그 메일 원문 보여줘",
+         "created_at": since + 4, "tags": [["h", "room-1"], ["e", "a", "", "root"]]},  # 스레드 안
+    ]
+    fake_buzz.feed = [mention]          # 주인의 멘션은 피드에도 오지만 한 번만 답한다
+    buzz_bot.run(once=True)
+    buzz_bot.run(once=True)
+    assert [c["text"] for c in fake_agent] == ["이번 주 약속 뭐 있어?", "그 메일 원문 보여줘"]
+    assert fake_buzz.threads == [("room-1", None), ("room-1", None), ("room-1", "d")]
+    assert fake_buzz.sent[1] == "이벤트 없음"
