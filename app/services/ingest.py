@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from app.core.config import get_settings
 from app.repositories import events
+from app.services.email_parse import write_parsed
 
 MESSAGE_KEY_RE = re.compile(r"^(sms|mms)-[0-9A-Za-z_]+$")
 
@@ -174,6 +175,7 @@ def _store_email(tmp: Path, size: int, sha: str, account: str) -> tuple[int, boo
         return existing
     path = tmp.with_name(f"{sha[:16]}.eml")
     tmp.replace(path)
+    write_parsed(path)   # 같은 이름의 .json: 헤더, 본문 텍스트, 첨부 목록
     payload = {"account": account, "message_id": message_id or None,
                "from": str(mail.get("From") or ""), "to": str(mail.get("To") or ""),
                "subject": str(mail.get("Subject") or ""), "date": str(mail.get("Date") or ""),

@@ -35,6 +35,7 @@ def test_email_verdicts(client, fake_jev):
     items = client.get("/v1/verdicts/emails").json()["items"]
     assert len(items) == 1
     assert (items[0]["account"], items[0]["subject"], items[0]["status"]) == ("gmail", "meeting", "kept")
+    assert items[0]["text"] == "다음주 화요일 오후 3시 회의 가능하신가요?"
 
 
 def test_verdicts_require_token(client, monkeypatch):

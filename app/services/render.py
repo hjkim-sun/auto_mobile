@@ -4,12 +4,10 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from email import policy
-from email.parser import BytesParser
-from html import unescape
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.services.email_parse import load_parsed
 
 MAX_STATE_CHARS = 12000
 
@@ -41,20 +39,17 @@ def render_message(msg: dict) -> str | None:
 
 
 def render_email(payload: dict, path: Path) -> str:
-    with path.open("rb") as f:
-        mail = BytesParser(policy=policy.default).parse(f)
-    body = mail.get_body(preferencelist=("plain", "html"))
-    text = body.get_content() if body else ""
-    if body and body.get_content_type() == "text/html":
-        text = re.sub(r"(?is)<(script|style).*?</\1>", " ", text)
-        text = unescape(re.sub(r"<[^>]+>", " ", text))
-    text = re.sub(r"\n\s*\n+", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()
-    return "\n".join([
+    mail = load_parsed(path)
+    # 광고 메일의 추적용 쿼리(?utm_...)가 본문을 차지하지 않게 URL 의 쿼리를 뗀다.
+    text = re.sub(r"(https?://[^\s?#)>\]]+)[?#][^\s)>\]]*", r"\1", mail["text"])
+    lines = [
         f"[EMAIL] 계정: {payload.get('account')}",
-        f"보낸 사람: {payload.get('from')}",
-        f"받는 사람: {payload.get('to')}",
-        f"제목: {payload.get('subject')}",
-        f"날짜: {payload.get('date')}",
-        "",
-        text or "(본문 없음)",
-    ])
+        f"보낸 사람: {mail['from']}",
+        f"받는 사람: {mail['to']}",
+        f"제목: {mail['subject']}",
+        f"날짜: {mail['date_text'] or mail['date']}",
+    ]
+    if mail["attachments"]:
+        lines.append("첨부: " + ", ".join(f"{a['content_type']} {a['filename'] or ''}".strip()
+                                          for a in mail["attachments"]))
+    return "\n".join([*lines, "", text or "(본문 없음)"])

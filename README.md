@@ -43,6 +43,7 @@ uv run pytest
 
 판별 내역(`/v1/verdicts/*`)은 최신순으로 `{"items": [...], "next_before_id"}` 를 돌려준다.
 `status` 는 `pending|processing|kept|discarded|failed`, 다음 페이지는 `?before_id=<next_before_id>`.
+메일 항목에는 파싱한 본문(`text`)과 첨부 목록(`attachments`)이 들어 있다.
 음성 전사(`/v1/transcriptions`)는 faster-whisper large-v3-turbo(`WHISPER_MODEL_DIR`, 기본 `~/whisper/large-v3-turbo`)로
 `input_path` 의 음성을 `output_dir`(기본 `transcripts`) 아래 `{파일명}.txt` 와 `{파일명}.json`(구간별 시각) 으로 저장한다.
 경로는 모두 `DATA_DIR` 기준이며 그 밖은 400. CPU 에서 실시간의 절반쯤 걸리므로 접수만 하고 202 를 돌려준다.
@@ -95,6 +96,7 @@ data/
     messages/YYYYMMDD/{sms|mms}-{id}.json     YYYYMMDD 는 문자 자체의 date 기준
     messages/YYYYMMDD/{sms|mms}-{id}/{첨부}
     emails/{sha256 앞 16자}.eml
+    emails/{sha256 앞 16자}.json    .eml 을 푼 것: 헤더, date_text, 본문 텍스트(text), 첨부 목록
   transcripts/            전사 결과 기본 위치 (output_dir 로 바꿀 수 있음)
     calls/{sha256 앞 12자}_{파일명}.txt|.json   수신한 통화녹음의 자동 전사 결과
 ```

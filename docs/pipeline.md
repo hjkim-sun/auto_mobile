@@ -35,7 +35,7 @@ sequenceDiagram
     loop 5분마다 (MAIL_POLL_SECONDS)
         M->>N: 읽기 전용 SELECT INBOX, 커서 이후 UID 검색
         N-->>M: 새 메일 원본 (BODY.PEEK, 읽음 처리 안 함)
-        M->>S: data/raw/emails/*.eml 저장, events 행 추가 (source=email)<br/>Message-ID 가 이미 있으면 건너뜀
+        M->>S: data/raw/emails/*.eml 원본과 파싱한 *.json 저장,<br/>events 행 추가 (source=email). Message-ID 가 이미 있으면 건너뜀
         M->>S: mail_cursors 에 마지막 UID 기록
     end
 

@@ -28,6 +28,8 @@ class EmailVerdict(Verdict):
     sender: str | None = None
     subject: str | None = None
     date: str | None = None
+    text: str | None = None
+    attachments: list[dict] = []
 
 
 class VerdictPage[T](BaseModel):

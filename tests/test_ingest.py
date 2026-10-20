@@ -80,7 +80,7 @@ def test_empty_body_is_rejected(client):
 def test_email_is_deduplicated_by_message_id_across_accounts(client):
     assert client.post("/v1/ingest/emails?account=gmail", content=EMAIL).status_code == 201
     assert client.post("/v1/ingest/emails?account=naver", content=EMAIL).status_code == 200
-    assert len(raw_files("emails")) == 1
+    assert len([n for n in raw_files("emails") if n.endswith(".eml")]) == 1
     assert client.post("/v1/ingest/emails", content=EMAIL).status_code == 422
 
 

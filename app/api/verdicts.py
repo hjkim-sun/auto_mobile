@@ -12,8 +12,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import require_ingest_token
+from app.core.config import get_settings
 from app.repositories import events
 from app.schemas.verdicts import EmailVerdict, MessageVerdict, VerdictPage
+from app.services.email_parse import load_parsed
 
 router = APIRouter(prefix="/v1/verdicts", tags=["verdicts"], dependencies=[Depends(require_ingest_token)])
 
@@ -51,8 +53,11 @@ def email_verdicts(status: Status | None = None, limit: int = Query(50, ge=1, le
                    before_id: int | None = None) -> dict:
     rows = events.list_events("email", status, limit, before_id)
     items = []
+    data_dir = get_settings().data_dir
     for row in rows:
-        mail = json.loads(row["payload"])
-        items.append(EmailVerdict(**_common(row), account=mail.get("account"), sender=mail.get("from"),
-                                  subject=mail.get("subject"), date=mail.get("date")))
+        account = json.loads(row["payload"]).get("account")
+        mail = load_parsed(data_dir / row["raw_path"])
+        items.append(EmailVerdict(**_common(row), account=account, sender=mail["from"],
+                                  subject=mail["subject"], date=mail["date_text"] or mail["date"],
+                                  text=mail["text"], attachments=mail["attachments"]))
     return _page(rows, items, limit)
