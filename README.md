@@ -44,7 +44,7 @@ uv run pytest
 | GET | `/v1/health` | |
 
 수신(`/v1/ingest/*`)은 새로 받으면 201, 이미 받은 것이면 200. 응답 body 는 `{"event_id", "duplicate"}`.
-통화녹음(`/v1/ingest/calls`)은 새로 받으면 곧바로 `transcripts/calls` 로 전사를 접수하고 응답에 `transcription_id` 를 붙인다
+통화녹음(`/v1/ingest/calls`)은 새로 받으면 곧바로 `transcripts/calls/YYYYMMDD`(원본과 같은 날짜 폴더) 로 전사를 접수하고 응답에 `transcription_id` 를 붙인다
 (중복이면 `null`). 진행은 `GET /v1/transcriptions/{transcription_id}` 로 본다.
 
 판별 내역(`/v1/verdicts/*`)은 최신순으로 `{"items": [...], "next_before_id"}` 를 돌려준다.
@@ -110,7 +110,7 @@ data/
     emails/YYYYMMDD/{sha256 앞 16자}.eml        YYYYMMDD 는 Date 헤더 기준 (한국 시간), 없으면 받은 날
     emails/YYYYMMDD/{sha256 앞 16자}.json    .eml 을 푼 것: 헤더, date_text, 본문 텍스트(text), 첨부 목록
   transcripts/            전사 결과 기본 위치 (output_dir 로 바꿀 수 있음)
-    calls/{sha256 앞 12자}_{파일명}.txt|.json   수신한 통화녹음의 자동 전사 결과
+    calls/YYYYMMDD/{sha256 앞 12자}_{파일명}.txt|.json   수신한 통화녹음의 자동 전사 결과. 날짜 폴더는 원본과 같다
 ```
 
 날짜 표시(`date_text`), 문자·통화·메일 날짜 폴더, 통화녹음 기본 파일명은 `TIMEZONE`(기본 `Asia/Seoul`) 기준이다.

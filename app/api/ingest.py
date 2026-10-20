@@ -1,13 +1,15 @@
 """수신 API. 새로 받으면 201, 이미 받은 것이면 200.
 
 POST /v1/ingest/calls?filename=<파일명>        통화녹음 raw body. 중복 기준: sha256
-                                               새로 받으면 transcripts/calls 로 전사를 접수한다
+                                               새로 받으면 transcripts/calls/YYYYMMDD 로 전사를 접수한다
 POST /v1/ingest/messages                       SMS/MMS JSON. 중복 기준: kind + id
 PUT  /v1/ingest/messages/{message_key}/attachments/{part_id}?filename=<파일명>
                                                MMS 첨부 raw body. message_key 는 "mms-10453" 형식
 POST /v1/ingest/emails?account=<naver|gmail>  raw .eml body. 중복 기준: Message-ID (없으면 sha256)
 """
 from __future__ import annotations
+
+from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
@@ -35,8 +37,11 @@ async def ingest_call(request: Request, response: Response, filename: str | None
     result = CallIngestResponse(event_id=event_id, duplicate=not created)
     if created:
         language = get_settings().whisper_language
+        raw_path = events.get(event_id)["raw_path"]
+        # 전사 결과도 원본과 같은 날짜 폴더에 둔다: raw/calls/YYYYMMDD → transcripts/calls/YYYYMMDD
+        output_dir = f"{CALL_TRANSCRIPTS_DIR}/{PurePosixPath(raw_path).parent.name}"
         result.transcription_id = transcribe.submit(
-            events.get(event_id)["raw_path"], CALL_TRANSCRIPTS_DIR, None if language == "auto" else language)
+            raw_path, output_dir, None if language == "auto" else language)
     return result
 
 
