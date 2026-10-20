@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -20,9 +21,13 @@ from app.core.config import get_settings
 from app.repositories import events
 from app.services.email_parse import date_text, write_parsed
 
+log = logging.getLogger(__name__)
+
 MESSAGE_KEY_RE = re.compile(r"^(sms|mms)-[0-9A-Za-z_]+$")
 # 통화녹음 파일명 속 녹음 시각: "통화 홍길동_261020_133023.m4a", "call_20261020_133023.m4a"
 CALL_DATE_RE = re.compile(r"(?<!\d)(\d{6}|\d{8})_\d{6}(?!\d)")
+CALL_DIRECTIONS = ("incoming", "outgoing", "unknown")
+PHONE_NUMBER_RE = re.compile(r"[0-9+*#() -]{1,40}")
 
 
 class IngestError(Exception):
@@ -95,6 +100,32 @@ def day_folder(date_text: str | None) -> str:
     return (date_text or datetime.now(get_settings().tz).isoformat())[:10].replace("-", "")
 
 
+def call_info(direction: str | None, number: str | None, name: str | None,
+              call_date: str | None) -> dict:
+    """폰이 통화 기록에서 찾아 붙인 값을 고른다. 빈 값과 형식이 틀린 값은 버린다.
+
+    값이 틀렸다고 녹음까지 거절하면 녹음을 잃으므로 422 를 내지 않는다.
+    """
+    raw = {"direction": direction, "number": number, "name": name, "call_date": call_date}
+    raw = {k: v.strip() for k, v in raw.items() if v and v.strip()}
+    info = {}
+    if raw.get("direction") in CALL_DIRECTIONS:
+        info["direction"] = raw["direction"]
+    if PHONE_NUMBER_RE.fullmatch(raw.get("number", "")):
+        info["number"] = raw["number"]
+    if raw.get("name"):
+        info["name"] = raw["name"][:100]
+    try:   # Automate 가 숫자를 1.79E12 처럼 보낼 수도 있어 float 로 읽는다
+        if (ms := int(float(raw.get("call_date", "")))) > 0:
+            info["call_date"] = ms
+            info["call_date_text"] = format_date(ms)
+    except (ValueError, OverflowError):
+        pass
+    if dropped := raw.keys() - info.keys():
+        log.warning("call info dropped: %s", {k: raw[k] for k in dropped})
+    return info
+
+
 def _call_day(name: str) -> str:
     m = CALL_DATE_RE.search(name)
     if m:
@@ -108,14 +139,11 @@ def _call_day(name: str) -> str:
 
 async def ingest_call(stream: AsyncIterator[bytes], filename: str | None,
                       content_type: str | None, info: dict | None = None) -> tuple[int, bool]:
-    """info: 폰이 통화 기록에서 찾아 붙인 direction, number, name, call_date (모두 선택)."""
+    """info: call_info() 가 고른 direction, number, name, call_date, call_date_text (모두 선택)."""
     name = safe_name(filename, datetime.now(get_settings().tz).strftime("call_%Y%m%d_%H%M%S.m4a"))
     tmp, size, sha = await receive_body(stream, get_settings().raw_dir / "calls")
     key = f"call:{sha}"
-    info = dict(info or {})
-    if info.get("call_date"):
-        info["call_date"] = int(info["call_date"])
-        info["call_date_text"] = format_date(info["call_date"])
+    info = info or {}
     if existing := _existing(key, tmp):
         # 통화 정보를 붙이기 전에 받은 녹음을 폰이 다시 보내면 비어 있던 값만 채운다.
         events.fill_payload(existing[0], info)

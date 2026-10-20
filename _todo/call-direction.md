@@ -1,6 +1,18 @@
 # 통화녹음에 수신/발신 여부, 상대 번호, 연락처 이름 붙이기
 
-상태: 서버 완료(2026-10-20, 배포 대기), 폰 작업 진행 중
+상태: 서버·폰 작업 완료(2026-10-20). 실제 수신/발신 통화로 확인만 남음
+
+## 폰에 넣은 것 (통화녹음전송 플로우)
+
+`4 Monitor file → 6 Delay 5s → 5 Content query → 3 HTTP request → 4`
+
+- 블록 6: 녹음 파일이 닫힌 직후에는 통화 기록 행이 아직 없을 수 있어 5초 기다린다.
+- 블록 5: `content://call_log/calls`, 컬럼 `["type", "number", "name", "date", "duration"]`,
+  Where `type IN (1,2) AND date + duration * 1000 >= (julianday('now') - 2440587.5) * 86400000 - 180000`
+  (3분 안에 끝난 수신/발신 통화), Order `date DESC`, Limit 1, Rows as dictionaries, Column result types `Text`, 출력 `calls`.
+  `input text` 로 `%` 를 넣을 수 없어 `strftime('%s')` 대신 `julianday` 를 쓴다.
+- 블록 3 URL: `... ++ urlEncode(path) ++ (#calls ? "&direction=" ++ {"1": "incoming", "2": "outgoing"}[calls[0]["type"]] ++ "&number=" ++ urlEncode(calls[0]["number"]) ++ "&name=" ++ urlEncode(calls[0]["name"]) ++ "&call_date=" ++ calls[0]["date"] : "")`
+- Automate 에 `READ_CALL_LOG` 를 `adb shell pm grant` 로 허용했다.
 
 ## 배경
 

@@ -104,10 +104,16 @@ def test_call_without_info_or_with_blank_info_works_as_before(client):
         assert not {"direction", "number", "name", "call_date"} & call_payload(event_id).keys()
 
 
-def test_call_info_is_validated(client):
-    assert client.post("/v1/ingest/calls?direction=sideways", content=b"a").status_code == 422
-    assert client.post("/v1/ingest/calls?number=abc", content=b"a").status_code == 422
-    assert client.post("/v1/ingest/calls?call_date=yesterday", content=b"a").status_code == 422
+def test_bad_call_info_is_dropped_but_recording_is_kept(client):
+    res = client.post("/v1/ingest/calls?direction=sideways&number=abc&call_date=yesterday&name=%20",
+                      content=b"a")
+    assert res.status_code == 201
+    assert not {"direction", "number", "name", "call_date"} & call_payload(res.json()["event_id"]).keys()
+
+
+def test_call_date_in_exponent_form_is_read(client):
+    res = client.post("/v1/ingest/calls?call_date=1.792383789902E12", content=b"a")
+    assert call_payload(res.json()["event_id"])["call_date"] == 1792383789902
 
 
 def test_call_resent_with_info_fills_missing_values(client):

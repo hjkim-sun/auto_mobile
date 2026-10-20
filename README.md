@@ -46,7 +46,7 @@ uv run pytest
 수신(`/v1/ingest/*`)은 새로 받으면 201, 이미 받은 것이면 200. 응답 body 는 `{"event_id", "duplicate"}`.
 통화녹음(`/v1/ingest/calls`)은 새로 받으면 곧바로 `transcripts/calls/YYYYMMDD`(원본과 같은 날짜 폴더) 로 전사를 접수하고 응답에 `transcription_id` 를 붙인다
 (중복이면 `null`). 진행은 `GET /v1/transcriptions/{transcription_id}` 로 본다.
-통화 정보 쿼리는 모두 선택이고 빈 값은 없는 것으로 본다. 폰이 통화 기록(`content://call_log/calls`)에서 찾아 붙인다.
+통화 정보 쿼리는 모두 선택이고 빈 값이나 형식이 틀린 값은 버린다(녹음은 받는다). 폰이 통화 기록(`content://call_log/calls`)에서 찾아 붙인다.
 `direction`(`incoming`\|`outgoing`\|`unknown`), `number`(상대 번호), `name`(연락처 이름), `call_date`(통화 시작, epoch ms).
 payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위키에 `통화: 수신 홍길동 (01012345678)` 처럼 붙인다.
 같은 녹음을 다시 보내면 저장은 건너뛰고 payload 에 비어 있던 통화 정보만 채운다.
