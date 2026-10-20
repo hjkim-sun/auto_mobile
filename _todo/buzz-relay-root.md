@@ -1,6 +1,6 @@
 # Buzz relay 띄우기 위한 root 작업
 
-상태: 대기. `_todo/root-setup.sh` 를 root 로 실행하면 된다
+상태: 완료 (2026-10-20). relay 실행 중, 초대 링크 발급함. 이 세션에 docker 그룹이 없으면 `sg docker -c "docker compose ..."` 로 쓴다
 
 relay 설정은 `deploy/buzz-relay/`에 있다. automan은 docker와 Caddyfile을 다룰 수 없으므로 아래는 root로 한다.
 
