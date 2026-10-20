@@ -1,6 +1,6 @@
 # Buzz 봇을 systemd 서비스로 등록하기 (root 작업)
 
-상태: unit·sudoers 완료, relay 실행 중. 사용자가 초대 링크로 들어오면 2번(BUZZ_OWNER_PUBKEY)부터 하고 `sudo -n systemctl start auto-mobile-buzz`
+상태: 완료 (2026-10-20). 서비스 실행 중. 사용자는 `--pair-code` 로 만든 페어링 코드로 앱에 연결했다
 
 `app/jobs/buzz_bot.py`는 구현돼 있다. automan 계정은 unit 파일과 sudoers를 고칠 수 없으므로 아래는 root로 한다.
 
