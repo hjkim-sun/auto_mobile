@@ -8,6 +8,8 @@
   상태              상태별 건수
   #123              이벤트 123 의 본문 (통화는 전사)
   위키 질문          LLM 위키에 묻기 (app/services/wiki.py)
+  일정              캘린더에 넣을지 답을 기다리는 일정
+  등록 N / 안함 N    일정 N 을 네이버 캘린더에 넣는다 / 넣지 않는다
 """
 from __future__ import annotations
 
@@ -19,8 +21,8 @@ from datetime import datetime, time, timezone
 
 from app.core.config import get_settings
 from app.db.session import connect
-from app.repositories import events
-from app.services import wiki
+from app.repositories import calendar_items, events
+from app.services import calendar, wiki
 from app.services.render import render
 
 SOURCES = {"문자": "message", "메일": "email", "통화": "call"}
@@ -33,7 +35,10 @@ HELP = """명령
 • 버린 [n] — 최근 버린 것
 • 상태 — 상태별 건수
 • #번호 — 원문 보기 (통화는 전사)
-• 위키 질문 — 위키에 묻기 (예: 위키 홍길동과 약속 언제야?)"""
+• 위키 질문 — 위키에 묻기 (예: 위키 홍길동과 약속 언제야?)
+• 일정 — 캘린더에 넣을지 답을 기다리는 일정
+• 등록 N / 안함 N — 일정 N 을 캘린더에 넣기 / 넣지 않기"""
+WEEKDAYS = "월화수목금토일"
 
 
 def _local(ts: str) -> str:
@@ -82,6 +87,53 @@ def notification(event: sqlite3.Row) -> str:
     return f"{summary_line(event)}\n\n{text}"
 
 
+def _when(item: sqlite3.Row) -> str:
+    def one(value: str, with_date: bool = True) -> str:
+        d = datetime.fromisoformat(value)
+        day = f"{d.month}/{d.day}({WEEKDAYS[d.weekday()]})"
+        if "T" not in value:
+            return day
+        return f"{day} {d:%H:%M}" if with_date else f"{d:%H:%M}"
+    text = one(item["start"])
+    if item["end"]:
+        same_day = item["end"][:10] == item["start"][:10]
+        text += "~" + one(item["end"], with_date=not same_day)
+    return text
+
+
+def calendar_line(item: sqlite3.Row) -> str:
+    where = f" @ {item['location']}" if item["location"] else ""
+    return f"[일정 {item['id']}] {_when(item)} {item['title']}{where} (#{item['event_id']})"
+
+
+def calendar_message(item: sqlite3.Row) -> str:
+    """위키 빌더가 고른 일정: 자동으로 넣은 것은 알리고, 애매한 것은 묻는다."""
+    if item["status"] == "added":
+        return f"캘린더에 넣었습니다\n{calendar_line(item)}\n이유: {item['reason']}\n잘못 넣었으면 캘린더에서 지워 주세요."
+    return (f"캘린더에 넣을까요?\n{calendar_line(item)}\n{item['reason']}\n"
+            f"넣으려면 \"등록 {item['id']}\", 넣지 않으려면 \"안함 {item['id']}\"")
+
+
+def _calendar_command(word: str, item_id: int) -> str:
+    item = calendar_items.get(item_id)
+    if item is None:
+        return f"일정 {item_id} 없음"
+    if item["status"] == "added":
+        return f"이미 넣었습니다\n{calendar_line(item)}"
+    if word == "안함":
+        calendar_items.set_status(item_id, "declined")
+        return f"넣지 않습니다\n{calendar_line(item)}"
+    calendar_items.set_status(item_id, "pending")
+    try:
+        uid = calendar.add(item)
+    except Exception as e:
+        # pending 으로 남으므로 위키 빌더가 다음 주기에 다시 넣는다.
+        calendar_items.set_error(item_id, repr(e))
+        return f"캘린더에 넣지 못했습니다. 잠시 뒤 다시 시도합니다: {e}"
+    calendar_items.set_status(item_id, "added", caldav_uid=uid)
+    return f"캘린더에 넣었습니다\n{calendar_line(item)}"
+
+
 def _recent(where: str, args: list, limit: int) -> list[sqlite3.Row]:
     with closing(connect()) as conn:
         return conn.execute(f"SELECT * FROM events WHERE {where} ORDER BY id DESC LIMIT ?",
@@ -118,6 +170,14 @@ def handle(command: str) -> str:
         return _listing(f"최근 {word}", _recent("status = 'kept' AND source = ?", [SOURCES[word]], n))
     if word == "버린":
         return _listing("최근 버린 것", _recent("status = 'discarded'", [], n))
+    if word in ("등록", "안함") and rest.strip().isdigit():
+        return _calendar_command(word, int(rest))
+    if word == "일정":
+        rows = calendar_items.with_status("asking")
+        if not rows:
+            return "답을 기다리는 일정 없음"
+        return "\n".join([f"넣을지 답을 기다리는 일정 ({len(rows)}건)", *(calendar_line(r) for r in rows),
+                          "\"등록 N\" 또는 \"안함 N\""])
     if word == "위키" and rest.strip():
         try:
             return wiki.ask(rest.strip())[:DETAIL_CHARS]

@@ -115,7 +115,7 @@ BUZZ_OWNER_PUBKEY=<사용자 npub>
 - `python -m app.jobs.buzz_bot --whoami` 로 연결을 확인하고, `--invite` 로 사용자용 초대 링크(7일, 1회용)를 만든다.
   폰 Buzz 앱 첫 화면의 "Enter a community link" 에 그 링크를 넣는다.
 - 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
-- `BUZZ_OWNER_PUBKEY` 와의 DM 만 읽고, 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`.
+- `BUZZ_OWNER_PUBKEY` 와의 DM 만 읽고, 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`, `일정`, `등록 N`, `안함 N`.
 
 ## LLM 위키
 
@@ -138,6 +138,28 @@ uv run python -m app.jobs.wiki_builder --lint    # 깨진 링크, 중복 페이�
   claude 가 실패하면 고치다 만 파일을 마지막 커밋으로 되돌리고, 다음 주기에 같은 자료를 다시 넣는다.
 - 통화는 전사가 끝난 뒤에 넣는다. 넣은 이벤트는 `wiki_ingests` 테이블에 남는다.
 - Buzz DM 으로 `위키 <질문>` 을 보내면 위키를 읽고 답한다.
+
+### 네이버 캘린더
+
+자료를 넣을 때 Claude 가 캘린더에 넣을 일정도 고른다(`prompts/wiki.md` 의 "캘린더 일정 판단").
+
+| decision | 예 | 처리 |
+|---|---|---|
+| `add` | 참석하겠다고 한 약속, 확정된 예약, 직접 해야 하는 일의 마감 | 위키 빌더가 바로 등록하고, Buzz 봇이 넣었다고 알린다 |
+| `ask` | 참석 여부를 정할 초대·행사, 답하지 않은 제안 | Buzz 봇이 묻는다. `등록 N` 이면 넣고 `안함 N` 이면 넣지 않는다 |
+| (없음) | 카드 결제 예정일, 약관 시행일처럼 할 일이 없는 안내 | 넣지 않는다 |
+
+```
+CALENDAR_ACCOUNT=naver-main   # MAIL_ACCOUNTS 의 name. 비우면 첫 번째 네이버 계정
+CALENDAR_NAME=내 캘린더        # 일정을 넣을 캘린더 이름
+CALENDAR_ENABLED=true
+```
+
+- CalDAV(`caldav.calendar.naver.com`)에 메일과 같은 애플리케이션 비밀번호로 로그인한다.
+- 넣은 일정은 UID 가 `auto-mobile-` 로 시작하고 설명 끝에 `auto_mobile #자료번호` 가 붙는다.
+- 후보와 처리 상태는 `calendar_items` 테이블에 남는다. 등록이 실패하면 `pending` 으로 남아 다음 주기에 다시 넣는다.
+- Buzz 봇 명령: `일정`(답을 기다리는 일정), `등록 N`, `안함 N`. Buzz 없이 `python -m app.jobs.buzz_bot --cmd "등록 2"` 로도 처리한다.
+- 캘린더 연동 전에 위키에 넣은 자료는 `python -m app.jobs.wiki_builder --plan-calendar` 로 `schedule.md` 에서 후보를 고른다.
 
 ```
 data/wiki/

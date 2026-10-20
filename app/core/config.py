@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     wiki_poll_seconds: float = Field(default=600, gt=0)
     wiki_timeout_seconds: float = Field(default=900, gt=0)
 
+    # 네이버 캘린더 (CalDAV). 위키 빌더가 고른 일정을 넣는다. 계정은 MAIL_ACCOUNTS 의 name 으로 고르고,
+    # 비우면 첫 번째 네이버 계정을 쓴다. 메일과 같은 애플리케이션 비밀번호로 로그인된다.
+    calendar_enabled: bool = True
+    calendar_account: str = ""
+    calendar_name: str = "내 캘린더"
+    calendar_caldav_url: str = "https://caldav.calendar.naver.com"
+
     @field_validator("mail_accounts")
     @classmethod
     def _unique_account_names(cls, v: list[MailAccountConfig]) -> list[MailAccountConfig]:

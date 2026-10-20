@@ -19,6 +19,7 @@ sequenceDiagram
     participant U as 사용자<br/>(Buzz 앱 DM, 자체 relay :8443 경유)
     participant K as 위키 빌더<br/>(app/jobs/wiki_builder.py)
     participant L as Claude Code<br/>(claude -p, data/wiki 안에서만)
+    participant G as 네이버 캘린더<br/>(CalDAV)
 
     Note over C,S: 1. 수신: 저장하고 바로 응답한다
     C->>A: POST /v1/ingest/messages 또는 /calls<br/>(Authorization: Bearer 토큰)
@@ -74,8 +75,13 @@ sequenceDiagram
         K->>S: kept 인데 wiki_ingests 에 없는 이벤트 조회<br/>(통화는 전사가 끝난 것만)
         K->>L: 자료 최대 5건 + 위키 규칙(prompts/wiki.md)
         L->>L: data/wiki 의 sources/, people/, orgs/, topics/,<br/>schedule.md, index.md 를 쓰고 고침
-        K->>S: wiki_ingests 에 기록, log.md 추가, data/wiki git 커밋
+        L-->>K: 캘린더 일정 후보 (decision=add 또는 ask)
+        K->>S: wiki_ingests 에 기록, log.md 추가, data/wiki git 커밋,<br/>calendar_items 에 후보 저장
+        K->>G: decision=add (확실한 약속, 예약, 마감) 는 바로 등록
     end
+    B->>U: 등록한 일정 알림, decision=ask (참석 여부를 정할 초대 등) 는<br/>"넣을까요? 등록 N / 안함 N"
+    U->>B: DM "등록 N"
+    B->>G: 일정 등록
     Note over K,L: claude 가 실패하면 고치다 만 파일을 되돌리고<br/>다음 주기에 같은 자료를 다시 넣는다
     U->>B: DM "위키 질문"
     B->>L: 읽기 전용으로 질문

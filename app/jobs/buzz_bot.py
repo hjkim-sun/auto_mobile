@@ -2,7 +2,7 @@
 
 반드시 1개 프로세스만 띄운다. 명령은 app/services/bot.py 참고.
 처음 띄울 때 이미 있던 이벤트는 알리지 않는다(buzz_state.notify_after_id).
-실행: python -m app.jobs.buzz_bot [--once | --whoami | --invite]
+실행: python -m app.jobs.buzz_bot [--once | --whoami | --invite | --cmd 명령]
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import time
 
 from app.core.config import get_settings
 from app.db.session import init_db
-from app.repositories import buzz_state
+from app.repositories import buzz_state, calendar_items
 from app.services import bot, buzz
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,11 @@ def notify(channel: str) -> int:
     for event in buzz_state.unnotified_kept(after):
         buzz.send(channel, bot.notification(event))
         buzz_state.mark_notified(event["id"])
+        sent += 1
+    # 위키 빌더가 캘린더에 넣은 일정은 알리고, 애매한 일정은 넣을지 묻는다.
+    for item in calendar_items.unnotified():
+        buzz.send(channel, bot.calendar_message(item))
+        calendar_items.mark_notified(item["id"])
         sent += 1
     return sent
 
@@ -91,8 +96,13 @@ def main() -> int:
     parser.add_argument("--whoami", action="store_true", help="봇 프로필(pubkey)을 출력하고 종료. 연결 확인용")
     parser.add_argument("--invite", action="store_true",
                         help="커뮤니티 초대 링크(7일, 1회용)를 만들어 출력하고 종료. 봇이 relay owner 여야 한다")
+    parser.add_argument("--cmd", metavar="명령", help="DM 명령 하나를 Buzz 없이 처리하고 답을 출력 (예: --cmd '등록 2')")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    if args.cmd:
+        init_db()
+        print(bot.handle(args.cmd))
+        return 0
     if args.whoami:
         print(json.dumps(buzz.whoami(), ensure_ascii=False, indent=2))
         return 0

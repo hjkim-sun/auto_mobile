@@ -18,6 +18,11 @@ def not_ingested(limit: int = 100) -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def ingested() -> list[sqlite3.Row]:
+    with closing(connect()) as conn:
+        return conn.execute("SELECT event_id AS id FROM wiki_ingests ORDER BY event_id").fetchall()
+
+
 def mark(event_ids: list[int]) -> None:
     ts = now()
     with closing(connect()) as conn:

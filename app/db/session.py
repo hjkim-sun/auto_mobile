@@ -58,6 +58,24 @@ CREATE TABLE IF NOT EXISTS wiki_ingests (    -- 위키에 넣은 이벤트. 한 
     event_id     INTEGER PRIMARY KEY,
     ingested_at  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS calendar_items (  -- 위키 빌더가 고른 캘린더 일정 후보
+    id           INTEGER PRIMARY KEY,
+    event_id     INTEGER NOT NULL,         -- 근거 자료 (events.id)
+    title        TEXT NOT NULL,
+    start        TEXT NOT NULL,            -- 2026-10-22T20:00 또는 2026-10-30 (하루 종일), TIMEZONE 기준
+    end          TEXT,
+    location     TEXT,
+    note         TEXT,
+    decision     TEXT NOT NULL,            -- add (바로 등록) | ask (사용자에게 묻기)
+    reason       TEXT,
+    status       TEXT NOT NULL,            -- pending (등록 대기) | asking (답 대기) | added | declined
+    caldav_uid   TEXT,
+    error        TEXT,
+    notified     INTEGER NOT NULL DEFAULT 0,  -- Buzz 로 알렸거나 물었는지
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
 """
 
 
