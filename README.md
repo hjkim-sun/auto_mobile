@@ -114,6 +114,7 @@ BUZZ_RELAY_URL=https://srv2036064.hstgr.cloud:8443   # 자체 운영 relay (depl
 BUZZ_PRIVATE_KEY=<봇 키, hex 또는 nsec>
 BUZZ_OWNER_PUBKEY=<사용자 npub>
 BUZZ_BOT_NAME=auto_mobile        # 앱 DM 목록에 보이는 봇 이름. 봇이 시작할 때 프로필에 넣는다
+BUZZ_NOTIFY_CHANNEL=<채널 UUID>    # 알림을 보낼 채널. 비우면 DM 으로 보낸다
 ```
 
 - relay 와는 공식 `buzz` CLI 로 주고받는다. CLI 는 데스크톱 릴리스 `.deb` 에 들어 있다:
@@ -121,6 +122,7 @@ BUZZ_BOT_NAME=auto_mobile        # 앱 DM 목록에 보이는 봇 이름. 봇이
 - relay 는 이 서버에서 docker 로 운영한다(`deploy/buzz-relay/README.md`). 봇이 커뮤니티 owner 다.
 - `python -m app.jobs.buzz_bot --whoami` 로 연결을 확인하고, `--invite` 로 사용자용 초대 링크(7일, 1회용)를 만든다. 앱에는 출력의 `app_url`(`buzz://join?…`)을 넣는다.
   폰 Buzz 앱 첫 화면의 "Enter a community link" 에 그 링크를 넣는다.
+- 알림(kept 이벤트, 캘린더 등록·질문)은 `BUZZ_NOTIFY_CHANNEL` 이 있으면 그 채널로, 없으면 주인과의 DM 으로 보낸다. 캘린더 질문에 채널에서 답하려면 그 채널을 `BUZZ_LISTEN_CHANNELS` 에도 넣는다.
 - 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
 - `BUZZ_OWNER_PUBKEY` 와의 DM 에서는 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`, `일정`, `등록 N`, `안함 N`, `새대화`.
 

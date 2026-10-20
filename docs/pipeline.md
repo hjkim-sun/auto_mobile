@@ -64,7 +64,7 @@ sequenceDiagram
     Note over S,U: 3. 알림과 명령: Buzz 봇 (5초마다)
     loop BUZZ_POLL_SECONDS
         B->>S: kept 인데 notifications 에 없는 이벤트 조회
-        B->>U: DM 알림 (요약 + 본문 앞부분, 통화는 전사)
+        B->>U: 알림 (요약 + 본문 앞부분, 통화는 전사)<br/>BUZZ_NOTIFY_CHANNEL 채널, 없으면 DM
         B->>S: notifications 에 기록
         U->>B: DM 명령 (오늘, 메일 5, #123 ...)
         B->>S: 조회

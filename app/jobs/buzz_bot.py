@@ -40,7 +40,9 @@ def dm_channel() -> str:
     return channel
 
 
-def notify(channel: str) -> int:
+def notify(dm: str) -> int:
+    """kept 알림과 캘린더 알림. BUZZ_NOTIFY_CHANNEL 이 있으면 그 채널로, 없으면 DM 으로 보낸다."""
+    channel = get_settings().buzz_notify_channel or dm
     after = buzz_state.get("notify_after_id")
     if after is None:
         after = buzz_state.max_event_id()

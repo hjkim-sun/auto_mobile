@@ -52,7 +52,8 @@ def fake_buzz(monkeypatch):
     monkeypatch.setenv("BUZZ_OWNER_PUBKEY", OWNER_NPUB)
     monkeypatch.setenv("BUZZ_PRIVATE_KEY", BOT_KEY)
     monkeypatch.setenv("BUZZ_BOT_NAME", "auto_mobile")
-    monkeypatch.setenv("BUZZ_LISTEN_CHANNELS", "[]")   # .env 의 실제 봇 이름과 상관없이
+    monkeypatch.setenv("BUZZ_LISTEN_CHANNELS", "[]")
+    monkeypatch.setenv("BUZZ_NOTIFY_CHANNEL", "")   # .env 의 실제 봇 이름과 상관없이
     from app.core.config import get_settings
     get_settings.cache_clear()
     init_db()
@@ -215,3 +216,13 @@ def test_listening_channel_answers_owner_without_mention(fake_buzz, fake_agent, 
     assert [c["text"] for c in fake_agent] == ["이번 주 약속 뭐 있어?", "그 메일 원문 보여줘"]
     assert fake_buzz.threads == [("room-1", None), ("room-1", None), ("room-1", "d")]
     assert fake_buzz.sent[1] == "이벤트 없음"
+
+
+def test_notifications_go_to_notify_channel(fake_buzz, monkeypatch):
+    monkeypatch.setenv("BUZZ_NOTIFY_CHANNEL", "room-1")
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    buzz_bot.run(once=True)
+    kept(SMS, "message:sms-new")
+    buzz_bot.run(once=True)
+    assert len(fake_buzz.sent) == 1 and fake_buzz.threads == [("room-1", None)]

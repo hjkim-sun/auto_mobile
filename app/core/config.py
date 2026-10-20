@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     buzz_bot_name: str = "auto_mobile"
     # 멘션 없이도 주인의 말에 답하는 채널 UUID 목록 (JSON). 다른 사람을 콕 집어 부른 말은 빼고 답한다.
     buzz_listen_channels: list[str] = []
+    # 알림(kept 이벤트, 캘린더)을 보낼 채널 UUID. 비우면 주인과의 DM 으로 보낸다.
+    buzz_notify_channel: str = ""
 
     # LLM 위키 (app/jobs/wiki_builder.py). kept 이벤트를 Claude Code(헤드리스)가 data/wiki 의 마크다운으로 정리한다.
     # 위키 관리 규칙은 WIKI_SCHEMA_PATH. claude 는 로그인돼 있어야 한다(automan 계정의 ~/.claude).
