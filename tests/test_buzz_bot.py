@@ -9,7 +9,9 @@ from app.services import bot, buzz
 
 OWNER = "2b2d578fc2b303bcee9483229cf0ed0c0c02663541289abc580a8f2ce32924d0"
 OWNER_NPUB = "npub19vk40r7zkvpmem55sv3feu8dpsxqye34gy5f40zcp28jecefyngqufnm7t"
-BOT = "f" * 64
+BOT_KEY = "0000000000000000000000000000000000000000000000000000000000000003"
+BOT = "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"   # BOT_KEY 의 pubkey
+PEER = "e" * 64
 SMS = {"kind": "sms", "id": 1, "from": "01012345678", "date_text": "2026-10-20 09:00:00",
        "text": "홍길동입니다. 내일 3시 회의 가능하세요?", "attachments": []}
 
@@ -18,13 +20,26 @@ class FakeBuzz:
     def __init__(self):
         self.sent = []
         self.inbox = []
+        self.feed = []
+        self.threads = []
+        self.reactions = []
 
     def open_dm(self, pubkey):
         assert pubkey == OWNER
         return "dm-1"
 
-    def send(self, channel, content):
+    def send(self, channel, content, reply_to=None):
         self.sent.append(content)
+        self.threads.append((channel, reply_to))
+
+    def react(self, event_id, emoji):
+        self.reactions.append(event_id)
+
+    def user_names(self, pubkeys):
+        return {OWNER: "주인", PEER: "codex"}
+
+    def mentions(self, since, limit=50):
+        return [m for m in self.feed if m["created_at"] >= since]
 
     def get_messages(self, channel, since=None, limit=50):
         return [m for m in self.inbox if since is None or m["created_at"] >= since]
@@ -34,11 +49,12 @@ class FakeBuzz:
 def fake_buzz(monkeypatch):
     monkeypatch.setenv("BUZZ_RELAY_URL", "https://example.communities.buzz.xyz")
     monkeypatch.setenv("BUZZ_OWNER_PUBKEY", OWNER_NPUB)
+    monkeypatch.setenv("BUZZ_PRIVATE_KEY", BOT_KEY)
     from app.core.config import get_settings
     get_settings.cache_clear()
     init_db()
     fake = FakeBuzz()
-    for name in ("open_dm", "send", "get_messages"):
+    for name in ("open_dm", "send", "get_messages", "react", "user_names", "mentions"):
         monkeypatch.setattr(buzz, name, getattr(fake, name))
     return fake
 
@@ -88,7 +104,70 @@ def test_owner_commands_are_answered_once(fake_buzz):
     assert fake_buzz.sent[1].startswith("최근 문자 (1건)")
 
 
+@pytest.fixture
+def fake_agent(monkeypatch):
+    calls = []
+
+    def reply(channel, text, sender, is_owner, history=None):
+        calls.append({"channel": channel, "text": text, "sender": sender, "owner": is_owner,
+                      "history": history})
+        return f"에이전트 답: {text}"
+    monkeypatch.setattr(buzz_bot.agent, "reply", reply)
+    return calls
+
+
+def test_free_text_goes_to_agent_and_commands_do_not(fake_buzz, fake_agent):
+    buzz_bot.run(once=True)
+    fake_buzz.sent.clear()
+    since = buzz_bot.buzz_state.get("dm_since")
+    fake_buzz.inbox = [
+        {"id": "a", "pubkey": OWNER, "content": "상태", "created_at": since},
+        {"id": "b", "pubkey": OWNER, "content": "안함2 안함 4", "created_at": since + 1},
+    ]
+    buzz_bot.run(once=True)
+    assert fake_buzz.sent[0] == "이벤트 없음"
+    assert fake_buzz.sent[1] == "에이전트 답: 안함2 안함 4"
+    assert fake_agent == [{"channel": "dm-1", "text": "안함2 안함 4", "sender": "주인", "owner": True,
+                           "history": []}]
+    assert fake_buzz.reactions == ["b"] and fake_buzz.threads[1] == ("dm-1", None)
+
+
+def test_channel_mentions_are_answered_in_thread_with_peer_limit(fake_buzz, fake_agent, monkeypatch):
+    monkeypatch.setenv("AGENT_PEER_REPLIES", "2")
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    buzz_bot.run(once=True)
+    since = buzz_bot.buzz_state.get("mention_since")
+    tag = [["h", "room-1"], ["p", BOT]]
+    fake_buzz.inbox = [{"id": "h1", "pubkey": OWNER, "kind": 9, "content": "이번 주 약속 같이 보자",
+                        "created_at": since - 5}]
+    fake_buzz.feed = [
+        {"id": "m0", "pubkey": OWNER, "content": "@auto_mobile 새 메일 있어?", "created_at": since,
+         "tags": [["h", "dm-1"], ["p", BOT]]},                                            # DM 은 answer 가 맡는다
+        {"id": "m1", "pubkey": OWNER, "content": "@auto_mobile 이번 주 약속 알려줘", "created_at": since, "tags": tag},
+        {"id": "m2", "pubkey": PEER, "content": "@auto_mobile 근거는?", "created_at": since + 1, "tags": tag},
+        {"id": "m3", "pubkey": PEER, "content": "@auto_mobile 또?", "created_at": since + 2, "tags": tag},
+        {"id": "m4", "pubkey": PEER, "content": "@auto_mobile 또또?", "created_at": since + 3, "tags": tag},
+        {"id": "m5", "pubkey": BOT, "content": "내 글", "created_at": since + 4, "tags": tag},
+    ]
+    buzz_bot.run(once=True)
+    buzz_bot.run(once=True)
+    assert [c["text"] for c in fake_agent] == ["이번 주 약속 알려줘", "근거는?", "또?"]   # m4 는 횟수 초과
+    assert fake_agent[0]["history"] == ["- 주인: 이번 주 약속 같이 보자"]
+    assert [c["owner"] for c in fake_agent] == [True, False, False]
+    assert fake_buzz.threads == [("room-1", "m1"), ("room-1", "m2"), ("room-1", "m3")]
+
+    fake_buzz.feed.append({"id": "m6", "pubkey": OWNER, "content": "@auto_mobile 상태", "created_at": since + 5,
+                           "tags": tag})
+    fake_buzz.feed.append({"id": "m7", "pubkey": PEER, "content": "@auto_mobile 다시", "created_at": since + 6,
+                           "tags": tag})
+    buzz_bot.run(once=True)
+    assert fake_agent[-1]["text"] == "다시"      # 주인이 말하면 횟수가 다시 시작된다
+    assert fake_buzz.threads[-2] == ("room-1", "m6")
+
+
 def test_unknown_command_shows_help(fake_buzz):
+    assert bot.command("뭐해") is None
     assert bot.handle("뭐해") == bot.HELP
     assert bot.handle("#999") == "#999 없음"
     assert bot.handle("오늘") == "오늘 남긴 것: 없음"

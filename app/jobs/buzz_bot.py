@@ -1,6 +1,9 @@
-"""Buzz 봇. kept 로 판별된 이벤트를 사용자에게 DM 으로 알리고, 사용자의 DM 명령에 답한다.
+"""Buzz 봇. kept 로 판별된 이벤트를 사용자에게 DM 으로 알리고, 말을 걸면 답한다.
 
-반드시 1개 프로세스만 띄운다. 명령은 app/services/bot.py 참고.
+- 주인의 DM 과, 다른 채널에서 봇을 멘션한 말(스레드로 답)에 답한다.
+- 명령(app/services/bot.py)은 바로 답하고, 그 밖의 말은 에이전트(app/services/agent.py, Claude Code)가 답한다.
+- 다른 에이전트가 멘션하면 주인이 다시 말할 때까지 AGENT_PEER_REPLIES 번까지만 답한다.
+반드시 1개 프로세스만 띄운다.
 처음 띄울 때 이미 있던 이벤트는 알리지 않는다(buzz_state.notify_after_id).
 실행: python -m app.jobs.buzz_bot [--once | --whoami | --invite | --pair-code | --cmd 명령]
 """
@@ -9,12 +12,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import queue
+import re
+import threading
 import time
 
 from app.core.config import get_settings
 from app.db.session import init_db
 from app.repositories import buzz_state, calendar_items
-from app.services import bot, buzz
+from app.services import agent, bot, buzz, nostr
+
+HISTORY_MESSAGES = 10
 
 logger = logging.getLogger(__name__)
 
@@ -49,25 +57,132 @@ def notify(channel: str) -> int:
     return sent
 
 
-def answer(channel: str) -> int:
-    owner = buzz_state.get("dm_owner")
-    since = buzz_state.get("dm_since", int(time.time()))
-    seen = set(buzz_state.get("dm_seen", []))
-    # --since 는 초 단위라 같은 초의 메시지가 다시 올 수 있다. 마지막 초의 id 를 기억해 거른다.
-    messages = sorted(buzz.get_messages(channel, since=since), key=lambda m: m.get("created_at", 0))
-    replied = 0
-    for msg in messages:
+def _unseen(key: str, fetch) -> list[dict]:
+    """fetch(since) 로 받은 메시지 중 아직 처리하지 않은 것. 처리했다고 바로 기록한다.
+
+    --since 는 초 단위라 같은 초의 메시지가 다시 올 수 있다. 마지막 초의 id 를 기억해 거른다.
+    """
+    since = buzz_state.get(f"{key}_since", int(time.time()))
+    seen = set(buzz_state.get(f"{key}_seen", []))
+    fresh = []
+    for msg in sorted(fetch(since), key=lambda m: m.get("created_at", 0)):
         if msg.get("id") in seen or msg.get("created_at", 0) < since:
             continue
-        if msg.get("pubkey") == owner and isinstance(msg.get("content"), str):
-            buzz.send(channel, bot.handle(msg["content"]))
-            replied += 1
+        fresh.append(msg)
         if msg.get("created_at", 0) > since:
             since, seen = msg["created_at"], set()
         seen.add(msg.get("id"))
-        buzz_state.put("dm_since", since)
-        buzz_state.put("dm_seen", sorted(seen))
+    buzz_state.put(f"{key}_since", since)
+    buzz_state.put(f"{key}_seen", sorted(seen))
+    return fresh
+
+
+def answer(channel: str) -> int:
+    """주인과의 DM. 주인이 보낸 말에만 답한다."""
+    owner = buzz_state.get("dm_owner")
+    replied = 0
+    for msg in _unseen("dm", lambda since: buzz.get_messages(channel, since=since)):
+        if msg.get("pubkey") == owner and isinstance(msg.get("content"), str):
+            respond(channel, msg, in_dm=True)
+            replied += 1
     return replied
+
+
+def answer_mentions(dm: str) -> int:
+    """다른 채널에서 봇을 멘션한 말. 스레드로 답한다. DM 은 answer 가 맡는다."""
+    me = bot_pubkey()
+    replied = 0
+    for msg in _unseen("mention", lambda since: buzz.mentions(since)):
+        channel = buzz.channel_of(msg)
+        if channel in (None, dm) or msg.get("pubkey") == me or not isinstance(msg.get("content"), str):
+            continue
+        respond(channel, msg, in_dm=False)
+        replied += 1
+    return replied
+
+
+def bot_pubkey() -> str:
+    return nostr.public_key(get_settings().buzz_private_key.get_secret_value())
+
+
+def strip_mention(text: str) -> str:
+    name = re.escape(get_settings().buzz_bot_name)
+    return re.sub(rf"@{name}\b|nostr:npub1[02-9ac-hj-np-z]+", "", text).strip()
+
+
+def respond(channel: str, msg: dict, in_dm: bool) -> None:
+    """명령이면 바로 답하고, 아니면 에이전트에 넘긴다."""
+    settings = get_settings()
+    is_owner = msg.get("pubkey") == buzz_state.get("dm_owner")
+    text = strip_mention(msg["content"])
+    reply_to = None if in_dm else msg.get("id")
+    if is_owner:
+        buzz_state.put(f"peer_replies:{channel}", 0)
+        if text.replace(" ", "") == "새대화":
+            agent.reset(channel)
+            buzz.send(channel, "새 대화를 시작합니다.", reply_to)
+            return
+        if (result := bot.command(text)) is not None:
+            buzz.send(channel, result, reply_to)
+            return
+        if not settings.agent_enabled:
+            buzz.send(channel, bot.HELP, reply_to)
+            return
+    else:
+        # 다른 에이전트가 부른 경우. 에이전트끼리 끝없이 주고받지 않게 주인이 다시 말할 때까지 횟수를 센다.
+        count = buzz_state.get(f"peer_replies:{channel}", 0)
+        if not settings.agent_enabled or count >= settings.agent_peer_replies:
+            logger.info("skip peer mention %s in %s (%d replies)", msg.get("id"), channel, count)
+            return
+        buzz_state.put(f"peer_replies:{channel}", count + 1)
+    dispatch(lambda: agent_reply(channel, msg, text, is_owner, in_dm))
+
+
+def agent_reply(channel: str, msg: dict, text: str, is_owner: bool, in_dm: bool) -> None:
+    reply_to = None if in_dm else msg.get("id")
+    try:
+        buzz.react(msg["id"], "👀")   # 답을 만드는 중이라는 표시
+    except buzz.BuzzError:
+        logger.warning("could not react to %s", msg.get("id"))
+    try:
+        names = buzz.user_names([msg["pubkey"]])
+        history = [] if in_dm else channel_history(channel, msg)
+        result = agent.reply(channel, text or "(빈 메시지)", names.get(msg["pubkey"], msg["pubkey"][:8]),
+                             is_owner, history)
+    except Exception as e:
+        logger.exception("agent reply failed")
+        result = f"에이전트 오류: {str(e)[:300]}"
+    buzz.send(channel, result, reply_to)
+
+
+def channel_history(channel: str, current: dict, limit: int = HISTORY_MESSAGES) -> list[str]:
+    """에이전트에 같이 넘기는 채널의 최근 대화. 다른 에이전트와 토론할 때 맥락이 된다."""
+    messages = [m for m in buzz.get_messages(channel, limit=limit + 1)
+                if m.get("id") != current.get("id") and m.get("kind") == 9
+                and m.get("created_at", 0) <= current.get("created_at", 0)]
+    messages = sorted(messages, key=lambda m: m.get("created_at", 0))[-limit:]
+    names = buzz.user_names(sorted({m["pubkey"] for m in messages}))
+    return [f"- {names.get(m['pubkey'], m['pubkey'][:8])}: {m.get('content', '')[:500]}" for m in messages]
+
+
+_jobs: queue.Queue | None = None
+
+
+def dispatch(job) -> None:
+    """에이전트 답은 수십 초 걸리므로 작업 스레드에서 돌려 알림이 밀리지 않게 한다. --once 면 바로 돈다."""
+    if _jobs is None:
+        job()
+    else:
+        _jobs.put(job)
+
+
+def _worker() -> None:
+    while True:
+        job = _jobs.get()
+        try:
+            job()
+        except Exception:
+            logger.exception("agent job failed")
 
 
 def run(once: bool = False) -> None:
@@ -75,6 +190,10 @@ def run(once: bool = False) -> None:
     init_db()
     if not settings.buzz_relay_url or not settings.buzz_owner_pubkey:
         raise SystemExit("BUZZ_RELAY_URL and BUZZ_OWNER_PUBKEY are required")
+    global _jobs
+    if not once:
+        _jobs = queue.Queue()
+        threading.Thread(target=_worker, name="agent", daemon=True).start()
     try:
         buzz.set_name(settings.buzz_bot_name)
     except buzz.BuzzError:
@@ -84,8 +203,8 @@ def run(once: bool = False) -> None:
             channel = dm_channel()
             if n := notify(channel):
                 logger.info("notified %d events", n)
-            if n := answer(channel):
-                logger.info("answered %d commands", n)
+            if n := answer(channel) + answer_mentions(channel):
+                logger.info("answered %d messages", n)
         except Exception:
             # relay 가 잠시 안 되면 다음 주기에 다시 시도한다. 알림은 보낸 것만 기록하므로 빠지지 않는다.
             logger.exception("buzz bot cycle failed")

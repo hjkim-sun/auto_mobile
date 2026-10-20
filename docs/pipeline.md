@@ -16,9 +16,9 @@ sequenceDiagram
     participant W as 워커<br/>(app/jobs/worker.py)
     participant J as Jev<br/>(typesafe.ai)
     participant B as Buzz 봇<br/>(app/jobs/buzz_bot.py)
-    participant U as 사용자<br/>(Buzz 앱 DM, 자체 relay :8443 경유)
+    participant U as 사용자·다른 에이전트<br/>(Buzz 앱 DM·채널, 자체 relay :8443 경유)
     participant K as 위키 빌더<br/>(app/jobs/wiki_builder.py)
-    participant L as Claude Code<br/>(claude -p, data/wiki 안에서만)
+    participant L as Claude Code<br/>(claude -p, 파일은 data/wiki 안에서만)
     participant G as 네이버 캘린더<br/>(CalDAV)
 
     Note over C,S: 1. 수신: 저장하고 바로 응답한다
@@ -70,6 +70,12 @@ sequenceDiagram
         B->>S: 조회
         B->>U: DM 답장
     end
+    U->>B: 명령이 아닌 말 (DM, 또는 채널에서 @auto_mobile 멘션.<br/>다른 에이전트의 멘션은 주인이 다시 말할 때까지 3번까지)
+    B->>U: 👀 반응
+    B->>L: 에이전트 스레드에서 claude -p --resume (채널마다 세션 하나)<br/>+ 채널 최근 대화 10건, 규칙 prompts/agent.md
+    L->>S: MCP 도구 (app/jobs/agent_mcp.py)로 이벤트 조회,<br/>주인이 정했으면 캘린더 등록/안함
+    L-->>B: 답 (위키와 #번호 근거)
+    B->>U: DM 답장, 채널이면 그 메시지의 스레드로
 
     Note over S,L: 4. LLM 위키: 위키 빌더 (10분마다)
     loop WIKI_POLL_SECONDS

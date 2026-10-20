@@ -10,6 +10,8 @@
   위키 질문          LLM 위키에 묻기 (app/services/wiki.py)
   일정              캘린더에 넣을지 답을 기다리는 일정
   등록 N / 안함 N    일정 N 을 네이버 캘린더에 넣는다 / 넣지 않는다
+  새대화            에이전트 대화 맥락을 비운다 (app/jobs/buzz_bot.py 가 처리)
+명령이 아닌 말은 app/services/agent.py 의 에이전트가 답한다.
 """
 from __future__ import annotations
 
@@ -37,7 +39,9 @@ HELP = """명령
 • #번호 — 원문 보기 (통화는 전사)
 • 위키 질문 — 위키에 묻기 (예: 위키 홍길동과 약속 언제야?)
 • 일정 — 캘린더에 넣을지 답을 기다리는 일정
-• 등록 N / 안함 N — 일정 N 을 캘린더에 넣기 / 넣지 않기"""
+• 등록 N / 안함 N — 일정 N 을 캘린더에 넣기 / 넣지 않기
+• 새대화 — 에이전트와의 대화 맥락을 비우기
+그 밖의 말은 에이전트(Claude)가 위키와 자료를 보고 답합니다."""
 WEEKDAYS = "월화수목금토일"
 
 
@@ -105,7 +109,7 @@ def calendar_message(item: sqlite3.Row) -> str:
             f"넣으려면 \"등록 {item['id']}\", 넣지 않으려면 \"안함 {item['id']}\"")
 
 
-def _calendar_command(word: str, item_id: int) -> str:
+def calendar_command(word: str, item_id: int) -> str:
     item = calendar_items.get(item_id)
     if item is None:
         return f"일정 {item_id} 없음"
@@ -137,9 +141,14 @@ def _listing(title: str, rows: list[sqlite3.Row]) -> str:
     return "\n".join([f"{title} ({len(rows)}건)", *(summary_line(r) for r in rows)])
 
 
-def handle(command: str) -> str:
-    """사용자 DM 한 건에 대한 답."""
-    text = command.strip()
+def handle(text: str) -> str:
+    """명령 한 건에 대한 답. 명령이 아니면 도움말."""
+    return command(text) or HELP
+
+
+def command(text: str) -> str | None:
+    """명령이면 답, 명령이 아니면 None (Buzz 봇은 에이전트에 넘긴다)."""
+    text = text.strip()
     word, _, rest = text.partition(" ")
     n = int(rest) if rest.strip().isdigit() else 5
     n = max(1, min(n, 30))
@@ -162,7 +171,7 @@ def handle(command: str) -> str:
     if word == "버린":
         return _listing("최근 버린 것", _recent("status = 'discarded'", [], n))
     if word in ("등록", "안함") and rest.strip().isdigit():
-        return _calendar_command(word, int(rest))
+        return calendar_command(word, int(rest))
     if word == "일정":
         rows = calendar_items.with_status("asking")
         if not rows:
@@ -177,4 +186,6 @@ def handle(command: str) -> str:
     if word == "상태":
         counts = events.status_counts()
         return "\n".join(f"{k}: {v}" for k, v in sorted(counts.items())) or "이벤트 없음"
-    return HELP
+    if text in ("도움말", "help", "?"):
+        return HELP
+    return None

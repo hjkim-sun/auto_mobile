@@ -88,6 +88,16 @@ class Settings(BaseSettings):
     wiki_poll_seconds: float = Field(default=600, gt=0)
     wiki_timeout_seconds: float = Field(default=900, gt=0)
 
+    # Buzz 에이전트 (app/services/agent.py). 명령이 아닌 말은 Claude Code 가 위키와 MCP 도구로 답한다.
+    agent_enabled: bool = True
+    agent_model: str = "sonnet"
+    agent_prompt_path: Path = Path("prompts/agent.md")
+    agent_timeout_seconds: float = Field(default=300, gt=0)
+    # 채널에서 이 시간 동안 말이 없으면 다음 말부터 새 대화(claude 세션)로 시작한다.
+    agent_session_hours: float = Field(default=6, gt=0)
+    # 다른 에이전트끼리 서로 멘션하며 끝없이 주고받지 않게, 주인이 다시 말할 때까지 에이전트에게 답하는 횟수
+    agent_peer_replies: int = Field(default=3, ge=0)
+
     # 네이버 캘린더 (CalDAV). 위키 빌더가 고른 일정을 넣는다. 계정은 MAIL_ACCOUNTS 의 name 으로 고르고,
     # 비우면 첫 번째 네이버 계정을 쓴다. 메일과 같은 애플리케이션 비밀번호로 로그인된다.
     calendar_enabled: bool = True

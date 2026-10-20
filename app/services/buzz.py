@@ -55,8 +55,39 @@ def open_dm(pubkey_hex: str) -> str:
     return run("dms", "open", "--pubkey", pubkey_hex)["dm_id"]
 
 
-def send(channel: str, content: str) -> dict:
-    return run("messages", "send", "--channel", channel, "--content", "-", stdin=content)
+def send(channel: str, content: str, reply_to: str | None = None) -> dict:
+    """reply_to(이벤트 id)를 주면 그 메시지의 스레드에 답한다."""
+    args = ["messages", "send", "--channel", channel, "--content", "-"]
+    if reply_to:
+        args += ["--reply-to", reply_to]
+    return run(*args, stdin=content)
+
+
+def react(event_id: str, emoji: str) -> None:
+    run("reactions", "add", "--event", event_id, "--emoji", emoji)
+
+
+def user_names(pubkeys: list[str]) -> dict[str, str]:
+    """pubkey → 표시 이름. 이름이 없는 사용자는 빠진다."""
+    if not pubkeys:
+        return {}
+    args = ["users", "get"]
+    for pk in pubkeys:
+        args += ["--pubkey", pk]
+    result = run(*args) or []
+    return {u["pubkey"]: u["display_name"] for u in result if u.get("display_name")}
+
+
+def mentions(since: int, limit: int = 50) -> list[dict]:
+    """봇을 멘션한(p 태그) 메시지. 봇이 멤버인 모든 채널에서 모은다. DM 도 섞여 온다."""
+    result = run("feed", "get", "--types", "mentions", "--since", str(since), "--limit", str(limit))
+    if isinstance(result, dict):
+        result = result.get("entries") or result.get("events") or []
+    return result or []
+
+
+def channel_of(message: dict) -> str | None:
+    return next((t[1] for t in message.get("tags", []) if len(t) > 1 and t[0] == "h"), None)
 
 
 def get_messages(channel: str, since: int | None = None, limit: int = 50) -> list[dict]:
