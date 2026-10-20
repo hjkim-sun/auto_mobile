@@ -13,6 +13,7 @@ def settings_env(tmp_path, monkeypatch):
     monkeypatch.setenv("INGEST_TOKEN", "")
     monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
     monkeypatch.setenv("MAIL_ACCOUNTS", "[]")   # 실제 .env 의 메일 계정에 접속하지 않게
+    monkeypatch.setenv("DIARIZATION_ENABLED", "false")   # 실제 화자 분리 모델을 올리지 않게
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

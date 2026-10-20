@@ -64,6 +64,25 @@ def test_transcribe_writes_txt_and_json(client, fake_model, call_file):
     assert meta["segments"][1] == {"start": 1.5, "end": 3.0, "text": "홍길동입니다"}
 
 
+def test_speakers_are_labeled_by_first_appearance(client, fake_model, call_file, monkeypatch):
+    # 화자 분리 모델의 번호(7, 3)와 상관없이 먼저 말한 사람이 화자1
+    monkeypatch.setattr(transcribe, "diarize", lambda src: [(0.0, 1.4, 7), (1.3, 3.0, 3)])
+    res = client.post("/v1/transcriptions", json={"input_path": CALL, "output_dir": "transcripts/calls"})
+    job = wait_done(client, res.json()["id"])
+    assert job["text"] == "[화자1] 여보세요\n[화자2] 홍길동입니다\n"
+
+    meta = json.loads((get_settings().data_dir / "transcripts/calls/a1b2c3d4e5f6_통화 녹음 홍길동.json").read_text())
+    assert meta["speakers"] == 2
+    assert [s["speaker"] for s in meta["segments"]] == [1, 2]
+
+
+def test_assign_speakers_without_overlap():
+    segs = [{"start": 0.0, "end": 1.0, "text": "a"}, {"start": 5.0, "end": 6.0, "text": "b"}]
+    transcribe.assign_speakers(segs, [(0.0, 2.0, 0)])
+    assert [s["speaker"] for s in segs] == [1, None]
+    assert transcribe._line(segs[1]) == "[화자?] b"
+
+
 def test_default_output_dir_and_auto_language(client, fake_model, call_file):
     res = client.post("/v1/transcriptions", json={"input_path": CALL, "language": "auto"})
     job = wait_done(client, res.json()["id"])

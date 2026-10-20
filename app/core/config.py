@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     whisper_cpu_threads: int = Field(default=2, ge=1)
     whisper_language: str = "ko"
 
+    # 화자 분리 (sherpa-onnx). 모델 파일이 없으면 화자 없이 전사만 한다.
+    diarization_enabled: bool = True
+    diarization_segmentation_model: Path = (
+        Path.home() / "sherpa" / "sherpa-onnx-pyannote-segmentation-3-0" / "model.onnx")
+    diarization_embedding_model: Path = (
+        Path.home() / "sherpa" / "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx")
+    # 통화는 거의 항상 2명이다. 0 이면 diarization_threshold 로 화자 수를 추정한다.
+    diarization_num_speakers: int = Field(default=2, ge=0)
+    diarization_threshold: float = Field(default=0.5, gt=0)
+
     @field_validator("mail_accounts")
     @classmethod
     def _unique_account_names(cls, v: list[MailAccountConfig]) -> list[MailAccountConfig]:

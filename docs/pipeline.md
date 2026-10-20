@@ -28,7 +28,8 @@ sequenceDiagram
 
     opt 통화녹음
         A->>T: 전사 접수 (응답에 transcription_id 포함)
-        T->>S: Whisper 전사 결과 저장<br/>(data/transcripts/calls/*.txt)
+        T->>T: Whisper 전사 + sherpa-onnx 화자 분리(2명)<br/>구간마다 화자1/화자2 를 붙임
+        T->>S: 전사 결과 저장<br/>(data/transcripts/calls/*.txt, *.json)
     end
 
     Note over M,S: 1-1. 메일 수신: 폴러가 IMAP 에서 가져온다

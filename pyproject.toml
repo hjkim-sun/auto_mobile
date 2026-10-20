@@ -9,6 +9,8 @@ dependencies = [
     "faster-whisper>=1.1,<2",
     "httpx>=0.28,<1",
     "pydantic-settings>=2.6,<3",
+    "sherpa-onnx>=1.12,<2",
+    "sherpa-onnx-core>=1.12,<2",
     "uvicorn[standard]>=0.32,<1",
 ]
 

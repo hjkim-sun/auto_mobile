@@ -2,6 +2,9 @@
 
 CPU 에서 실시간의 절반쯤 걸리므로(2코어, 2분 37초 통화 → 81초) 요청은 접수만 하고,
 API 프로세스 안의 작업 스레드 1개가 순서대로 처리한다. 모델은 첫 작업 때 한 번 올린다.
+
+sherpa-onnx 로 화자를 나눠(2분 통화에 몇 초) 구간마다 화자 번호를 붙인다. 화자 분리가 꺼져 있거나
+실패하면 화자 없이 저장한다. 누가 "나"인지는 알 수 없어서 처음 말한 사람부터 화자1, 화자2 로 붙인다.
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ log = logging.getLogger(__name__)
 
 _executor: ThreadPoolExecutor | None = None
 _model = None
+_diarizer = None
 
 
 def resolve_in_data_dir(path: str) -> Path:
@@ -76,6 +80,66 @@ def load_model():
     return _model
 
 
+def load_diarizer():
+    global _diarizer
+    if _diarizer is None:
+        import sherpa_onnx
+
+        settings = get_settings()
+        n, threads = settings.diarization_num_speakers, settings.whisper_cpu_threads
+        config = sherpa_onnx.OfflineSpeakerDiarizationConfig(
+            segmentation=sherpa_onnx.OfflineSpeakerSegmentationModelConfig(
+                pyannote=sherpa_onnx.OfflineSpeakerSegmentationPyannoteModelConfig(
+                    model=str(settings.diarization_segmentation_model)),
+                num_threads=threads),
+            embedding=sherpa_onnx.SpeakerEmbeddingExtractorConfig(
+                model=str(settings.diarization_embedding_model), num_threads=threads),
+            clustering=sherpa_onnx.FastClusteringConfig(
+                num_clusters=n if n > 0 else -1, threshold=settings.diarization_threshold),
+            min_duration_on=0.3, min_duration_off=0.5)
+        if not config.validate():
+            raise RuntimeError("invalid diarization config (model files missing?)")
+        _diarizer = sherpa_onnx.OfflineSpeakerDiarization(config)
+    return _diarizer
+
+
+def diarize(src: Path) -> list[tuple[float, float, int]] | None:
+    """[(시작, 끝, 화자 번호)] 를 돌려준다. 꺼져 있거나 실패하면 None."""
+    if not get_settings().diarization_enabled:
+        return None
+    try:
+        from faster_whisper.audio import decode_audio
+
+        diarizer = load_diarizer()
+        result = diarizer.process(decode_audio(str(src), sampling_rate=diarizer.sample_rate))
+        return [(t.start, t.end, t.speaker) for t in result.sort_by_start_time()]
+    except Exception:
+        log.exception("diarization failed for %s", src)
+        return None
+
+
+def assign_speakers(segments: list[dict], turns: list[tuple[float, float, int]]) -> None:
+    """구간마다 가장 많이 겹치는 화자를 붙인다. 번호는 처음 등장한 순서대로 1부터 매긴다."""
+    numbers: dict[int, int] = {}
+    for seg in segments:
+        overlap: dict[int, float] = {}
+        for start, end, speaker in turns:
+            o = min(seg["end"], end) - max(seg["start"], start)
+            if o > 0:
+                overlap[speaker] = overlap.get(speaker, 0.0) + o
+        if overlap:
+            speaker = max(overlap, key=overlap.get)
+            seg["speaker"] = numbers.setdefault(speaker, len(numbers) + 1)
+        else:
+            seg["speaker"] = None
+
+
+def _line(seg: dict) -> str:
+    if "speaker" not in seg:
+        return seg["text"]
+    return f"[화자{seg['speaker'] or '?'}] {seg['text']}"
+
+
 def _run(job_id: int) -> None:
     job = transcriptions.get(job_id)
     if job is None:
@@ -99,12 +163,15 @@ def transcribe_file(input_path: str, output_dir: str, language: str | None) -> t
     segments, info = load_model().transcribe(str(src), language=language, vad_filter=True)
     segments = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()}
                 for s in segments]
+    meta = {"input": _relative(src), "language": info.language, "duration": round(info.duration, 2)}
+    turns = diarize(src)
+    if turns is not None:
+        assign_speakers(segments, turns)
+        meta["speakers"] = len({s["speaker"] for s in segments} - {None})
 
     txt = out / f"{src.stem}.txt"
-    _write(txt, "\n".join(s["text"] for s in segments) + "\n")
-    _write(out / f"{src.stem}.json", json.dumps(
-        {"input": _relative(src), "language": info.language, "duration": round(info.duration, 2),
-         "segments": segments}, ensure_ascii=False, indent=2))
+    _write(txt, "\n".join(_line(s) for s in segments) + "\n")
+    _write(out / f"{src.stem}.json", json.dumps({**meta, "segments": segments}, ensure_ascii=False, indent=2))
     return _relative(txt), round(info.duration, 2)
 
 

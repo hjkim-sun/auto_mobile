@@ -16,6 +16,12 @@
 uv sync
 # 전사 모델 (약 1.6GB)
 uv run python -c "from huggingface_hub import snapshot_download as d; d('mobiuslabsgmbh/faster-whisper-large-v3-turbo', local_dir='$HOME/whisper/large-v3-turbo')"
+# 화자 분리 모델 (약 45MB, sherpa-onnx). 없으면 화자 없이 전사만 한다
+mkdir -p ~/sherpa && cd ~/sherpa
+curl -LO https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
+python3 -c "import tarfile; tarfile.open('sherpa-onnx-pyannote-segmentation-3-0.tar.bz2').extractall('.', filter='data')"
+curl -LO https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx
+cd -
 cp .env.example .env   # TYPESAFE_API_KEY, INGEST_TOKEN 설정
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8080
 uv run python -m app.jobs.worker        # 반드시 1개만
@@ -49,6 +55,12 @@ uv run pytest
 경로는 모두 `DATA_DIR` 기준이며 그 밖은 400. CPU 에서 실시간의 절반쯤 걸리므로 접수만 하고 202 를 돌려준다.
 `GET /v1/transcriptions/{id}` 의 `status` 가 `queued|running|done|failed` 이고, `done` 이면 `text` 가 채워진다.
 `language` 를 생략하면 `WHISPER_LANGUAGE`(기본 `ko`), `"auto"` 면 자동 감지.
+
+전사와 함께 sherpa-onnx 로 화자를 나눈다. `.txt` 는 줄마다 `[화자1] 여보세요` 처럼 화자가 붙고,
+`.json` 은 구간마다 `speaker`(1부터, 겹치는 화자가 없으면 `null`)와 전체 `speakers` 수가 들어간다.
+번호는 처음 말한 사람부터 매기므로 누가 "나"인지는 알 수 없다. 통화는 2명으로 보고 나눈다
+(`DIARIZATION_NUM_SPEAKERS`, 0 이면 `DIARIZATION_THRESHOLD` 로 추정). `DIARIZATION_ENABLED=false` 거나
+모델 파일(`DIARIZATION_SEGMENTATION_MODEL`, `DIARIZATION_EMBEDDING_MODEL`)이 없거나 화자 분리가 실패하면 화자 없이 저장한다.
 
 `/v1/health` 를 뺀 모든 API 는 `Authorization: Bearer <INGEST_TOKEN>` 이 필요하다.
 
