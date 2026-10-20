@@ -1,6 +1,6 @@
 # Buzz 봇을 systemd 서비스로 등록하기 (root 작업)
 
-상태: 대기 (사용자가 커뮤니티 초대를 마친 뒤 root로 진행)
+상태: unit 과 sudoers 는 `_todo/root-setup.sh` 가 만든다. 초대를 마친 뒤 `sudo -n systemctl start auto-mobile-buzz`
 
 `app/jobs/buzz_bot.py`는 구현돼 있다. automan 계정은 unit 파일과 sudoers를 고칠 수 없으므로 아래는 root로 한다.
 

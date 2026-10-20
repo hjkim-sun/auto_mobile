@@ -1,6 +1,6 @@
 # Buzz relay 띄우기 위한 root 작업
 
-상태: 대기 (사용자가 root로 진행)
+상태: 대기. `_todo/root-setup.sh` 를 root 로 실행하면 된다
 
 relay 설정은 `deploy/buzz-relay/`에 있다. automan은 docker와 Caddyfile을 다룰 수 없으므로 아래는 root로 한다.
 

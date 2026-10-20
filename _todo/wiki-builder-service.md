@@ -1,6 +1,6 @@
 # LLM 위키 빌더를 systemd 서비스로 등록하기 (root 작업)
 
-상태: 대기 (사용자가 root로 진행)
+상태: 대기. `_todo/root-setup.sh` 를 root 로 실행하면 된다
 
 `app/jobs/wiki_builder.py`는 구현돼 있고 `--once`로 기존 kept를 넣어 봤다. 계속 돌리려면 서비스로 등록한다.
 claude가 automan의 `~/.claude` 로그인 정보를 쓰므로 `User=automan`으로 돌린다.
