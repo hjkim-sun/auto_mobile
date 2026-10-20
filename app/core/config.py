@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,6 +24,8 @@ class Settings(BaseSettings):
     )
 
     data_dir: Path = Path("data")
+    # 문자·메일의 date_text, 날짜 폴더, 통화녹음 기본 파일명에 쓰는 시간대. 서버(VPS)는 UTC 다.
+    timezone: str = "Asia/Seoul"
     # 설정하면 수신 API 가 "Authorization: Bearer <토큰>" 을 요구한다.
     ingest_token: SecretStr | None = None
 
@@ -60,6 +63,10 @@ class Settings(BaseSettings):
         if len(names) != len(set(names)):
             raise ValueError("mail account names must be unique")
         return v
+
+    @property
+    def tz(self) -> ZoneInfo:
+        return ZoneInfo(self.timezone)
 
     @property
     def raw_dir(self) -> Path:

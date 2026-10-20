@@ -30,7 +30,7 @@ def test_parse_decodes_body_and_lists_attachments(tmp_path):
     assert parsed["text"] == ("안녕하세요.\n\n견적서 확인 부탁드립니다.\n"
                               "https://example.com/doc/1?utm_source=mail&utm_campaign=x")
     assert parsed["attachments"] == [{"filename": "견적서.pdf", "content_type": "application/pdf", "size": 13}]
-    assert parsed["date_text"] is not None
+    assert parsed["date_text"] == "2026-10-20 09:35:53"   # 한국 시간
 
 
 def test_html_only_mail_is_converted_to_text(tmp_path):

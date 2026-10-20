@@ -84,12 +84,12 @@ def format_date(value: object) -> str | None:
         return None
     if ts > 1e11:
         ts /= 1000
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.fromtimestamp(ts, get_settings().tz).strftime("%Y-%m-%d %H:%M:%S")
 
 
 async def ingest_call(stream: AsyncIterator[bytes], filename: str | None,
                       content_type: str | None) -> tuple[int, bool]:
-    name = safe_name(filename, datetime.now().strftime("call_%Y%m%d_%H%M%S.m4a"))
+    name = safe_name(filename, datetime.now(get_settings().tz).strftime("call_%Y%m%d_%H%M%S.m4a"))
     tmp, size, sha = await receive_body(stream, get_settings().raw_dir / "calls")
     key = f"call:{sha}"
     if existing := _existing(key, tmp):
@@ -123,7 +123,7 @@ def ingest_message(body: bytes) -> tuple[int, bool]:
         for p in parts if p.get("ct") not in ("text/plain", "application/smil")
     ]
     msg["date_text"] = format_date(msg.get("date"))
-    msg["received_at"] = datetime.now().isoformat(timespec="seconds")
+    msg["received_at"] = datetime.now(get_settings().tz).isoformat(timespec="seconds")
 
     settings = get_settings()
     # 날짜 폴더는 문자 자체의 수신 시각 기준이다. 같은 문자가 다른 날 재전송돼도 같은 경로에 쌓인다.

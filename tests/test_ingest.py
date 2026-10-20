@@ -29,6 +29,9 @@ def test_message_is_stored_and_deduplicated(client):
     assert first.status_code == 201
     assert first.json() == {"event_id": 1, "duplicate": False}
 
+    stored = json.loads((get_settings().raw_dir / "messages/20261017/sms-18664.json").read_text())
+    assert stored["date_text"] == "2026-10-17 23:36:04"   # 한국 시간
+
     again = client.post("/v1/ingest/messages", json=SMS)
     assert again.status_code == 200
     assert again.json() == {"event_id": 1, "duplicate": True}

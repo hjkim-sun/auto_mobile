@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
+
+from app.core.config import get_settings
 
 
 def parse_email(path: Path) -> dict:
@@ -71,6 +72,6 @@ def body_text(mail: EmailMessage) -> str:
 
 def _date_text(value: object) -> str | None:
     try:
-        return parsedate_to_datetime(str(value)).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        return parsedate_to_datetime(str(value)).astimezone(get_settings().tz).strftime("%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):
         return None
