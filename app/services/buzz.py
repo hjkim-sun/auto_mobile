@@ -5,6 +5,7 @@ Buzz 는 Nostr relay 라 요청마다 Schnorr 서명이 필요하다. 서명은 
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
@@ -84,3 +85,18 @@ def mint_invite(ttl_secs: int = 7 * 24 * 3600, max_uses: int = 1) -> dict:
     relay_ws = "ws" + base.removeprefix("http")
     invite["app_url"] = "buzz://join?" + urlencode({"relay": relay_ws, "code": invite["code"]})
     return invite
+
+
+def pairing_code() -> dict:
+    """폰 Buzz 앱의 "Use pairing code" 칸에 넣을 코드와, 그 안에 든 새 사용자 키의 pubkey.
+
+    앱 버전에 따라 첫 화면에 초대 링크 입력칸이 없고 데스크톱 앱이 만든 페어링 코드만 받는다.
+    데스크톱의 legacy 형식(buzz:// + base64url JSON {relayUrl, pubkey, nsec})을 그대로 만든다.
+    코드에 비밀키가 들어 있으니 저장하지 말고, pubkey 는 relay 멤버로 넣고 BUZZ_OWNER_PUBKEY 로 쓴다.
+    """
+    secret = nostr.generate_key()
+    pubkey = nostr.public_key(secret)
+    payload = {"relayUrl": get_settings().buzz_relay_url.rstrip("/"), "pubkey": pubkey,
+               "nsec": nostr.bech32_encode("nsec", bytes.fromhex(secret))}
+    code = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
+    return {"pubkey": pubkey, "code": "buzz://" + code}

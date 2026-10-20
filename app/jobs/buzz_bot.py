@@ -2,7 +2,7 @@
 
 반드시 1개 프로세스만 띄운다. 명령은 app/services/bot.py 참고.
 처음 띄울 때 이미 있던 이벤트는 알리지 않는다(buzz_state.notify_after_id).
-실행: python -m app.jobs.buzz_bot [--once | --whoami | --invite | --cmd 명령]
+실행: python -m app.jobs.buzz_bot [--once | --whoami | --invite | --pair-code | --cmd 명령]
 """
 from __future__ import annotations
 
@@ -96,6 +96,8 @@ def main() -> int:
     parser.add_argument("--whoami", action="store_true", help="봇 프로필(pubkey)을 출력하고 종료. 연결 확인용")
     parser.add_argument("--invite", action="store_true",
                         help="커뮤니티 초대 링크(7일, 1회용)를 만들어 출력하고 종료. 봇이 relay owner 여야 한다")
+    parser.add_argument("--pair-code", action="store_true",
+                        help="새 사용자 키로 폰 앱 페어링 코드를 만들어 출력하고 종료. pubkey 는 relay 멤버로 따로 넣는다")
     parser.add_argument("--cmd", metavar="명령", help="DM 명령 하나를 Buzz 없이 처리하고 답을 출력 (예: --cmd '등록 2')")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -108,6 +110,9 @@ def main() -> int:
         return 0
     if args.invite:
         print(json.dumps(buzz.mint_invite(), ensure_ascii=False, indent=2))
+        return 0
+    if args.pair_code:
+        print(json.dumps(buzz.pairing_code(), ensure_ascii=False, indent=2))
         return 0
     run(once=args.once)
     return 0

@@ -24,7 +24,7 @@ docker compose exec relay buzz-admin list-members
 docker compose exec relay buzz-admin add-member --pubkey npub1... [--role admin]
 ```
 
-초대 링크(7일, 1회용): `uv run python -m app.jobs.buzz_bot --invite` (저장소 루트에서). 폰 Buzz 앱에는 `app_url`(`buzz://join?relay=wss://…&code=…`)을 넣는다. `url`은 웹 안내 페이지다. 앱 첫 화면의 **Enter a community link** 에 넣는다. "Use pairing code" 칸은 데스크톱 앱의 키를 옮기는 용도라 초대 링크를 넣으면 `Invalid base64 data` 가 난다.
+초대 링크(7일, 1회용): `uv run python -m app.jobs.buzz_bot --invite` (저장소 루트에서). 폰 Buzz 앱에는 `app_url`(`buzz://join?relay=wss://…&code=…`)을 넣는다. `url`은 웹 안내 페이지다. 앱 첫 화면에 **Enter a community link** 가 있으면 거기에 넣는다. 없는 버전이면 `--pair-code` 로 사용자 키를 담은 페어링 코드를 만들어 "Use pairing code" 에 넣고, 출력된 pubkey 를 `buzz-admin add-member` 와 `.env` 의 `BUZZ_OWNER_PUBKEY` 에 넣는다. "Use pairing code" 칸은 데스크톱 앱의 키를 옮기는 용도라 초대 링크를 넣으면 `Invalid base64 data` 가 난다.
 
 ## 백업
 
