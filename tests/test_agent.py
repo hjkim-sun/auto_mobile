@@ -67,3 +67,18 @@ def test_mcp_config_runs_server_from_repo(tmp_path):
     proc = subprocess.run([server["command"], *server["args"]], cwd=tmp_path, capture_output=True, text=True,
                           input='{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n', timeout=60)
     assert "search_events" in proc.stdout
+
+
+def test_brief_runs_once_without_session(monkeypatch):
+    event_id, _ = events.insert_event("message", "message:sms-1", SMS)
+    events.finish(event_id, "kept", {"useful": 0.9})
+    calls = []
+
+    def fake_run(session_id, resume, text):
+        calls.append((session_id, text))
+        return {"result": " 브리핑 "}
+    monkeypatch.setattr(agent, "_run", fake_run)
+    assert agent.brief([events.get(event_id)]) == "브리핑"
+    session_id, text = calls[0]
+    assert session_id is None and f"#{event_id} [문자]" in text and "내일 3시 회의" in text
+    assert buzz_state.get("agent_session:room") is None

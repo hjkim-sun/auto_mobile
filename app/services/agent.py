@@ -3,10 +3,12 @@
 claude 는 위키 디렉토리에서 --restricted 로 띄운다. Bash 가 없고, 파일 도구는 위키 안만 읽는다.
 원본 이벤트와 캘린더는 MCP 서버(app/jobs/agent_mcp.py)의 도구로만 다룬다. 규칙은 prompts/agent.md.
 대화 맥락은 채널마다 claude 세션 하나로 이어 가고, AGENT_SESSION_HOURS 동안 말이 없으면 새 세션을 연다.
+새로 남긴 자료의 알림(brief)은 대화와 따로 한 번만 돌리는 세션으로 만든다.
 """
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 import time
@@ -15,10 +17,11 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.repositories import buzz_state
-from app.services import wiki
+from app.services import bot, wiki
 
 REPO = Path(__file__).resolve().parents[2]
 TOOLS = "Read,Glob,Grep"
+BRIEF_CHARS = 3000   # 브리핑에 넣는 자료 하나의 본문 길이. 더 필요하면 에이전트가 get_event 로 본다.
 
 
 class AgentError(RuntimeError):
@@ -49,13 +52,16 @@ def _session(channel: str) -> tuple[str, bool]:
     return str(uuid.uuid4()), False
 
 
-def _run(session_id: str, resume: bool, text: str) -> dict:
+def _run(session_id: str | None, resume: bool, text: str) -> dict:
     s = get_settings()
     rules = (REPO / s.agent_prompt_path).read_text(encoding="utf-8").replace("{bot_name}", s.buzz_bot_name)
     cmd = [str(s.wiki_claude_path), "-p", "--restricted", "--strict-mcp-config", "--mcp-config", mcp_config(),
            "--tools", TOOLS, "--allowedTools", "mcp__auto_mobile", "--permission-prompts", "none",
            "--output-format", "json", "--model", s.agent_model, "--append-system-prompt", rules]
-    cmd += ["--resume", session_id] if resume else ["--session-id", session_id]
+    if session_id is None:
+        cmd.append("--no-session-persistence")
+    else:
+        cmd += ["--resume", session_id] if resume else ["--session-id", session_id]
     wiki.ensure_wiki()
     try:
         proc = subprocess.run(cmd, input=text, cwd=s.wiki_dir.resolve(), capture_output=True, text=True,
@@ -84,6 +90,25 @@ def reply(channel: str, text: str, sender: str, is_owner: bool, history: list[st
         out = _run(session_id, False, message)
     buzz_state.put(f"agent_session:{channel}", {"id": out.get("session_id") or session_id, "at": time.time()})
     return (out.get("result") or "").strip() or "(답이 비어 있음)"
+
+
+def brief_prompt(rows: list[sqlite3.Row]) -> str:
+    parts = [f"새로 남긴 자료 {len(rows)}건이 들어왔다. 주인에게 브리핑한다 (규칙의 '새 자료 브리핑').", ""]
+    for row in rows:
+        text = bot.body(row).strip()
+        if len(text) > BRIEF_CHARS:
+            text = text[:BRIEF_CHARS] + "\n…(잘림, get_event 로 전체를 본다)"
+        parts += [f"=== {bot.summary_line(row)}", text, ""]
+    return "\n".join(parts)
+
+
+def brief(rows: list[sqlite3.Row]) -> str:
+    """kept 이벤트 묶음을 위키 맥락과 함께 비서처럼 알리는 글."""
+    out = _run(None, False, brief_prompt(rows))
+    result = (out.get("result") or "").strip()
+    if not result:
+        raise AgentError("empty briefing")
+    return result
 
 
 def reset(channel: str) -> None:

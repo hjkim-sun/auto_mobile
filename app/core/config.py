@@ -101,6 +101,8 @@ class Settings(BaseSettings):
     agent_session_hours: float = Field(default=6, gt=0)
     # 다른 에이전트끼리 서로 멘션하며 끝없이 주고받지 않게, 주인이 다시 말할 때까지 에이전트에게 답하는 횟수
     agent_peer_replies: int = Field(default=3, ge=0)
+    # kept 알림을 원문 그대로 보내지 않고, 에이전트가 위키에서 맥락을 찾아 비서처럼 브리핑한다.
+    agent_briefing: bool = True
 
     # 네이버 캘린더 (CalDAV). 위키 빌더가 고른 일정을 넣는다. 계정은 MAIL_ACCOUNTS 의 name 으로 고르고,
     # 비우면 첫 번째 네이버 계정을 쓴다. 메일과 같은 애플리케이션 비밀번호로 로그인된다.

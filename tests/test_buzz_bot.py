@@ -54,6 +54,7 @@ def fake_buzz(monkeypatch):
     monkeypatch.setenv("BUZZ_BOT_NAME", "auto_mobile")
     monkeypatch.setenv("BUZZ_LISTEN_CHANNELS", "[]")
     monkeypatch.setenv("BUZZ_NOTIFY_CHANNEL", "")   # .env 의 실제 봇 이름과 상관없이
+    monkeypatch.setenv("AGENT_BRIEFING", "false")
     from app.core.config import get_settings
     get_settings.cache_clear()
     init_db()
@@ -226,3 +227,35 @@ def test_notifications_go_to_notify_channel(fake_buzz, monkeypatch):
     kept(SMS, "message:sms-new")
     buzz_bot.run(once=True)
     assert len(fake_buzz.sent) == 1 and fake_buzz.threads == [("room-1", None)]
+
+
+def test_kept_events_are_briefed_by_agent(fake_buzz, monkeypatch):
+    monkeypatch.setenv("AGENT_BRIEFING", "true")
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    briefed = []
+
+    def fake_brief(rows):
+        briefed.append([r["id"] for r in rows])
+        return "홍길동 님이 내일 회의를 물었습니다."
+    monkeypatch.setattr(buzz_bot.agent, "brief", fake_brief)
+    buzz_bot.run(once=True)
+    a, b = kept(SMS, "message:sms-a"), kept(SMS, "message:sms-b")
+    buzz_bot.run(once=True)
+    buzz_bot.run(once=True)
+    assert briefed == [[a, b]]
+    assert fake_buzz.sent == [f"홍길동 님이 내일 회의를 물었습니다.\n\n원문: #{a} #{b}"]
+
+
+def test_briefing_failure_falls_back_to_plain_notification(fake_buzz, monkeypatch):
+    monkeypatch.setenv("AGENT_BRIEFING", "true")
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+
+    def broken(rows):
+        raise buzz_bot.agent.AgentError("timeout")
+    monkeypatch.setattr(buzz_bot.agent, "brief", broken)
+    buzz_bot.run(once=True)
+    event_id = kept(SMS, "message:sms-a")
+    buzz_bot.run(once=True)
+    assert len(fake_buzz.sent) == 1 and fake_buzz.sent[0].startswith(f"#{event_id} [문자]")

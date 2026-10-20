@@ -1,4 +1,7 @@
-"""Buzz 봇. kept 로 판별된 이벤트를 사용자에게 DM 으로 알리고, 말을 걸면 답한다.
+"""Buzz 봇. kept 로 판별된 이벤트를 사용자에게 알리고, 말을 걸면 답한다.
+
+- 알림은 BUZZ_NOTIFY_CHANNEL(없으면 DM)로 보낸다. AGENT_BRIEFING 이면 에이전트가 위키 맥락을 붙여 브리핑하고,
+  실패하면 원문 알림을 보낸다.
 
 - 주인의 DM 과, 다른 채널에서 봇을 멘션한 말(스레드로 답)에 답한다.
 - 듣는 채널(BUZZ_LISTEN_CHANNELS)에서는 주인의 말에 멘션 없이도 답한다.
@@ -47,17 +50,36 @@ def notify(dm: str) -> int:
     if after is None:
         after = buzz_state.max_event_id()
         buzz_state.put("notify_after_id", after)
-    sent = 0
-    for event in buzz_state.unnotified_kept(after):
-        buzz.send(channel, bot.notification(event))
-        buzz_state.mark_notified(event["id"])
-        sent += 1
+    rows = buzz_state.unnotified_kept(after)
+    settings = get_settings()
+    if rows and settings.agent_enabled and settings.agent_briefing:
+        # 브리핑은 작업 스레드에서 수십 초 걸린다. 다음 주기에 또 넘기지 않게 먼저 알린 것으로 적는다.
+        for event in rows:
+            buzz_state.mark_notified(event["id"])
+        dispatch(lambda: send_briefing(channel, rows))
+    else:
+        for event in rows:
+            buzz.send(channel, bot.notification(event))
+            buzz_state.mark_notified(event["id"])
+    sent = len(rows)
     # 위키 빌더가 캘린더에 넣은 일정은 알리고, 애매한 일정은 넣을지 묻는다.
     for item in calendar_items.unnotified():
         buzz.send(channel, bot.calendar_message(item))
         calendar_items.mark_notified(item["id"])
         sent += 1
     return sent
+
+
+def send_briefing(channel: str, rows: list) -> None:
+    try:
+        text = agent.brief(rows)
+    except Exception:
+        logger.exception("briefing failed, sending plain notifications")
+        for event in rows:
+            buzz.send(channel, bot.notification(event))
+        return
+    refs = " ".join(f"#{r['id']}" for r in rows)
+    buzz.send(channel, f"{text}\n\n원문: {refs}")
 
 
 def _unseen(key: str, fetch) -> list[dict]:

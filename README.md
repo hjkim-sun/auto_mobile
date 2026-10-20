@@ -123,6 +123,7 @@ BUZZ_NOTIFY_CHANNEL=<채널 UUID>    # 알림을 보낼 채널. 비우면 DM 으
 - `python -m app.jobs.buzz_bot --whoami` 로 연결을 확인하고, `--invite` 로 사용자용 초대 링크(7일, 1회용)를 만든다. 앱에는 출력의 `app_url`(`buzz://join?…`)을 넣는다.
   폰 Buzz 앱 첫 화면의 "Enter a community link" 에 그 링크를 넣는다.
 - 알림(kept 이벤트, 캘린더 등록·질문)은 `BUZZ_NOTIFY_CHANNEL` 이 있으면 그 채널로, 없으면 주인과의 DM 으로 보낸다. 캘린더 질문에 채널에서 답하려면 그 채널을 `BUZZ_LISTEN_CHANNELS` 에도 넣는다.
+- kept 알림은 원문을 그대로 옮기지 않고 에이전트가 브리핑한다. 한 주기에 들어온 것을 묶어, 위키에서 보낸 사람·진행 중인 일·일정을 찾아 무엇인지, 할 일과 기한이 있는지 말한다(`prompts/agent.md` 의 '새 자료 브리핑'). 끝에 `원문: #번호` 를 붙인다. 에이전트가 실패하거나 `AGENT_BRIEFING=false` 면 원문 알림을 보낸다.
 - 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
 - `BUZZ_OWNER_PUBKEY` 와의 DM 에서는 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`, `일정`, `등록 N`, `안함 N`, `새대화`.
 
@@ -145,6 +146,7 @@ AGENT_MODEL=sonnet
 AGENT_TIMEOUT_SECONDS=300
 AGENT_SESSION_HOURS=6
 AGENT_PEER_REPLIES=3
+AGENT_BRIEFING=true         # false 면 kept 알림을 원문 그대로 보낸다
 ```
 
 ## LLM 위키
