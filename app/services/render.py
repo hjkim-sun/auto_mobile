@@ -18,6 +18,8 @@ def render(event: sqlite3.Row) -> str | None:
     payload = json.loads(event["payload"])
     if event["source"] == "message":
         text = render_message(payload)
+    elif event["source"] == "kakao":
+        text = render_kakao(payload)
     elif event["source"] == "email":
         text = render_email(payload, get_settings().data_dir / event["raw_path"])
     else:
@@ -72,6 +74,15 @@ def render_message(msg: dict) -> str | None:
                                           for a in msg["attachments"]))
     lines += ["", msg["text"]]
     return "\n".join(lines)
+
+
+def render_kakao(msg: dict) -> str:
+    lines = ["[카카오톡]" + (f" 방: {msg['room']}" if msg.get("room") else ""),
+             f"보낸 사람: {msg.get('sender')}", f"시각: {msg.get('date_text')}"]
+    if msg.get("context"):
+        # 앞 메시지. 짧은 답장("네 그때 봬요")도 무슨 말인지 알 수 있게 붙인다
+        lines += ["", "앞 대화:", *(f"{c.get('sender')}: {c.get('text')}" for c in msg["context"])]
+    return "\n".join([*lines, "", "메시지:", msg.get("text") or ""])
 
 
 def render_email(payload: dict, path: Path) -> str:

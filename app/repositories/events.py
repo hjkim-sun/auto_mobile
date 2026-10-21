@@ -54,6 +54,17 @@ def get(event_id: int) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
 
 
+def recent_kakao(room: str | None, sender: str, limit: int) -> list[dict]:
+    """같은 카톡 방(방 이름이 없으면 같은 보낸 사람)의 최근 메시지 (오래된 것부터). [{"sender", "text"}]"""
+    field, value = ("room", room) if room else ("sender", sender)
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            "SELECT json_extract(payload, '$.sender') AS sender, json_extract(payload, '$.text') AS text"
+            f" FROM events WHERE source = 'kakao' AND json_extract(payload, '$.{field}') = ?"
+            " ORDER BY id DESC LIMIT ?", (value, limit)).fetchall()
+    return [{"sender": r["sender"], "text": r["text"]} for r in reversed(rows)]
+
+
 def _find_id(conn: sqlite3.Connection, dedup_key: str) -> int | None:
     row = conn.execute("SELECT id FROM events WHERE dedup_key = ?", (dedup_key,)).fetchone()
     return row["id"] if row else None

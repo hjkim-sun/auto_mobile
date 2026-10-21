@@ -26,6 +26,12 @@ sequenceDiagram
     A->>S: 원본 파일 저장, events 행 추가<br/>(status=pending, 통화는 status=transcribing)
     A-->>C: 201 {event_id}<br/>(이미 받은 데이터면 저장 없이 200. 통화는 비어 있던 통화 정보만 채움)
 
+    opt 카카오톡 (KakaoTalk forward 플로우)
+        C->>A: POST /v1/ingest/kakao<br/>알림 채널 new_message_v6(알림 켠 방)의 알림 갱신마다 {title, message, ticker, when, channel, extras}
+        A->>S: data/raw/kakao/YYYYMMDD/{chatLogId}.json, events 행 추가 (source=kakao)<br/>같은 보낸 사람의 앞 메시지 5건을 맥락으로 붙임
+        A-->>C: 묶음 요약 알림이나 다른 채널은 200 {ignored: true}
+    end
+
     opt MMS 첨부 (2026-10-21부터 폰 플로우가 보내지 않음)
         C->>A: PUT /v1/ingest/messages/mms-{id}/attachments/{part}
         A->>S: 첨부 저장, 판별 시점(available_at)을 30초 뒤로 미룸

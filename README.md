@@ -1,6 +1,6 @@
 # auto_mobile
 
-폰(통화녹음·SMS/MMS)과 메일에서 들어오는 데이터를 수집하고, Jev 로 쓸모 여부를 판별한다.
+폰(통화녹음·SMS/MMS·카카오톡)과 메일에서 들어오는 데이터를 수집하고, Jev 로 쓸모 여부를 판별한다.
 
 ```
 수신 API (app/api)  ──▶  data/raw/ 원본 저장 + events 테이블 1건 1행
@@ -37,6 +37,7 @@ uv run pytest
 | POST | `/v1/ingest/messages` | `{"kind": "sms"\|"mms", "id", "from", "date", "text"?, "parts"?}` |
 | PUT | `/v1/ingest/messages/{sms\|mms}-{id}/attachments/{part_id}?filename=` | raw 첨부 |
 | POST | `/v1/ingest/emails?account=naver\|gmail` | raw .eml |
+| POST | `/v1/ingest/kakao` | `{"title", "message", "ticker", "when", "channel", "extras"}` (Automate 알림 출력) |
 | GET | `/v1/verdicts/messages?status=&limit=&before_id=` | |
 | GET | `/v1/verdicts/emails?status=&limit=&before_id=` | |
 | POST | `/v1/transcriptions` | `{"input_path", "output_dir"?, "language"?}` |
@@ -52,6 +53,12 @@ uv run pytest
 `direction`(`incoming`\|`outgoing`\|`unknown`), `number`(상대 번호), `name`(연락처 이름), `call_date`(통화 시작, epoch ms).
 payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위키에 `통화: 수신 홍길동 (01012345678)` 처럼 붙인다.
 같은 녹음을 다시 보내면 저장은 건너뛰고 payload 에 비어 있던 통화 정보만 채운다.
+
+카카오톡(`/v1/ingest/kakao`)은 폰 Automate 의 `Notification posted?` 출력을 그대로 받는다. 알림 하나가 메시지 하나이고 `extras.chatLogId` 로 중복을 거른다.
+카카오톡 알림의 `title` 은 방 이름이 아니라 마지막 메시지를 보낸 사람이고, 단톡방 이름과 오픈채팅 여부는 알림에 없다.
+그래서 알림 채널로 거른다. `KAKAO_CHANNELS`(기본 `["new_message_v6"]`, 알림을 켠 방)에 없는 채널과 묶음 요약 알림은 200 `{"ignored": true}`.
+오픈채팅방은 카톡에서 알림을 끄면 `quiet_new_message` 로 빠져 받지 않는다. 카톡 자체 방해금지 시간대에 온 메시지도 같은 채널이라 놓친다.
+payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `text`, `time`, `chat_log_id`, `context`(같은 보낸 사람의 앞 메시지 5건)다.
 
 판별 내역(`/v1/verdicts/*`)은 최신순으로 `{"items": [...], "next_before_id"}` 를 돌려준다.
 `status` 는 `pending|processing|kept|discarded|failed`, 다음 페이지는 `?before_id=<next_before_id>`.
@@ -80,6 +87,7 @@ Caddy 를 거친 요청(X-Forwarded-For 가 붙은 요청)에는 404 를 준다.
 | 파일 | 대상 |
 |---|---|
 | `prompts/message.toml` | SMS/MMS |
+| `prompts/kakao.toml` | 카카오톡 |
 | `prompts/email.toml` | 메일 |
 | `prompts/call.toml` | 통화녹음 전사 |
 
@@ -127,7 +135,7 @@ BUZZ_NOTIFY_CHANNEL=<채널 UUID>    # 알림을 보낼 채널. 비우면 DM 으
 - 알림(kept 이벤트, 캘린더 등록·질문)은 `BUZZ_NOTIFY_CHANNEL` 이 있으면 그 채널로, 없으면 주인과의 DM 으로 보낸다. 캘린더 질문에 채널에서 답하려면 그 채널을 `BUZZ_LISTEN_CHANNELS` 에도 넣는다.
 - kept 알림은 원문을 그대로 옮기지 않고 에이전트가 브리핑한다. 한 주기에 들어온 것을 묶어, 위키에서 보낸 사람·진행 중인 일·일정을 찾아 무엇인지, 할 일과 기한이 있는지 말한다(`prompts/agent.md` 의 '새 자료 브리핑'). 끝에 `원문: #번호` 를 붙인다. 에이전트가 실패하거나 `AGENT_BRIEFING=false` 면 원문 알림을 보낸다.
 - 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
-- `BUZZ_OWNER_PUBKEY` 와의 DM 에서는 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`, `일정`, `등록 N`, `안함 N`, `새대화`.
+- `BUZZ_OWNER_PUBKEY` 와의 DM 에서는 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|카톡|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`, `일정`, `등록 N`, `안함 N`, `새대화`.
 
 ### 에이전트
 

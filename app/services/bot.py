@@ -3,7 +3,7 @@
 명령 (DM 으로 보낸다)
   도움말            명령 목록
   오늘              오늘(TIMEZONE) 남긴 것 목록
-  문자|메일|통화 [n]  종류별 최근 남긴 것 n건 (기본 5)
+  문자|카톡|메일|통화 [n]  종류별 최근 남긴 것 n건 (기본 5)
   버린 [n]          최근 버린 것 n건. 판별이 놓친 게 없는지 볼 때
   상태              상태별 건수
   #123              이벤트 123 의 본문 (통화는 전사)
@@ -27,13 +27,13 @@ from app.repositories import calendar_items, events
 from app.services import calendar, wiki
 from app.services.render import call_party, call_transcript, render
 
-SOURCES = {"문자": "message", "메일": "email", "통화": "call"}
-LABELS = {"message": "문자", "email": "메일", "call": "통화"}
+SOURCES = {"문자": "message", "카톡": "kakao", "메일": "email", "통화": "call"}
+LABELS = {"message": "문자", "kakao": "카톡", "email": "메일", "call": "통화"}
 PREVIEW_CHARS = 300
 DETAIL_CHARS = 3500
 HELP = """명령
 • 오늘 — 오늘 남긴 것
-• 문자 / 메일 / 통화 [n] — 종류별 최근 남긴 것 (기본 5건)
+• 문자 / 카톡 / 메일 / 통화 [n] — 종류별 최근 남긴 것 (기본 5건)
 • 버린 [n] — 최근 버린 것
 • 상태 — 상태별 건수
 • #번호 — 원문 보기 (통화는 전사)
@@ -55,6 +55,8 @@ def summary_line(event: sqlite3.Row) -> str:
     label = LABELS.get(event["source"], event["source"])
     if event["source"] == "message":
         what = f"{p.get('from')}: {(p.get('text') or '(첨부)').splitlines()[0][:60]}"
+    elif event["source"] == "kakao":
+        what = f"{p.get('sender')}: {((p.get('text') or '').splitlines() or [''])[0][:60]}"
     elif event["source"] == "email":
         what = f"{_sender(p.get('from', ''))}: {p.get('subject') or '(제목 없음)'}"
     else:

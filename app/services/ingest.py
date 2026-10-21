@@ -28,6 +28,8 @@ MESSAGE_KEY_RE = re.compile(r"^(sms|mms)-[0-9A-Za-z_]+$")
 CALL_DATE_RE = re.compile(r"(?<!\d)(\d{6}|\d{8})_\d{6}(?!\d)")
 CALL_DIRECTIONS = ("incoming", "outgoing", "unknown")
 PHONE_NUMBER_RE = re.compile(r"[0-9+*#() -]{1,40}")
+KAKAO_CONTEXT = 5   # 카톡 메시지마다 앞 메시지를 이만큼 맥락으로 남긴다
+KAKAO_TICKER_RE = re.compile(r"^(.+?) : ", re.S)
 
 
 class IngestError(Exception):
@@ -157,15 +159,20 @@ async def ingest_call(stream: AsyncIterator[bytes], filename: str | None,
     return _register("call", key, payload, path, status="transcribing")
 
 
-def ingest_message(body: bytes) -> tuple[int, bool]:
+def _json_object(body: bytes) -> dict:
     try:
-        msg = json.loads(body)
-        if isinstance(msg, str):   # Automate 가 JSON 문자열을 한 번 더 인코딩해 보낸 경우
-            msg = json.loads(msg)
+        obj = json.loads(body)
+        if isinstance(obj, str):   # Automate 가 JSON 문자열을 한 번 더 인코딩해 보낸 경우
+            obj = json.loads(obj)
     except (ValueError, UnicodeDecodeError) as e:
         raise IngestError(400, f"invalid json: {e}")
-    if not isinstance(msg, dict):
+    if not isinstance(obj, dict):
         raise IngestError(400, "json object expected")
+    return obj
+
+
+def ingest_message(body: bytes) -> tuple[int, bool]:
+    msg = _json_object(body)
 
     key = f"{str(msg.get('kind') or '').lower()}-{msg.get('id')}"
     if not MESSAGE_KEY_RE.match(key):
@@ -188,6 +195,57 @@ def ingest_message(body: bytes) -> tuple[int, bool]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(msg, ensure_ascii=False, indent=2), encoding="utf-8")
     return _register("message", f"message:{key}", msg, path, delay=settings.message_settle_seconds)
+
+
+def kakao_message(note: dict) -> dict | None:
+    """Automate 의 Notification posted? 출력(note)에서 메시지 1건을 꺼낸다. 받지 않을 알림이면 None.
+
+    카카오톡은 방마다 알림 하나를 새 메시지로 갱신하고, Automate 는 갱신마다 블록을 통과시킨다.
+    - android.title 은 방 이름이 아니라 마지막 메시지를 보낸 사람이다. 단톡방 이름은 알림 어디에도 없다
+      (안드로이드는 shortcut 라벨로 보여 주는데 Automate 는 읽지 못한다). isGroupConversation 은 1:1 방도 true 다.
+    - Automate 는 extras 의 android.messages(Bundle 배열)를 넘기지 않는다. 마지막 메시지의 chatLogId 는
+      extras 최상위에 있다.
+    """
+    if note.get("channel") not in get_settings().kakao_channels:
+        return None
+    extras = note.get("extras") if isinstance(note.get("extras"), dict) else {}
+    title = str(extras.get("android.title") or note.get("title") or "").strip()
+    text = extras.get("android.text") or note.get("message")
+    if not title or not text:   # 방마다 알림을 묶는 요약 알림(GROUP_SUMMARY)은 제목과 본문이 비어 있다
+        return None
+    m = KAKAO_TICKER_RE.match(str(note.get("ticker") or ""))   # "보낸사람 : 본문"
+    room = extras.get("android.conversationTitle") or extras.get("android.hiddenConversationTitle")
+    try:   # Automate 숫자는 double 이라 19자리 chatLogId 는 끝자리가 뭉개져 올 수 있다
+        chat_log_id = int(float(extras["chatLogId"]))
+    except (KeyError, TypeError, ValueError, OverflowError):
+        chat_log_id = None
+    return {"sender": m.group(1) if m else title, "room": str(room) if room else None, "text": str(text),
+            "time": note.get("when"), "channel": note.get("channel"), "chat_log_id": chat_log_id}
+
+
+def ingest_kakao(body: bytes) -> tuple[int, bool] | None:
+    """카카오톡 알림 1건 → (event_id, created). 받지 않을 알림이면 None."""
+    m = kakao_message(_json_object(body))
+    if m is None:
+        return None
+    if m["chat_log_id"] is not None:
+        msg_id = str(m["chat_log_id"])
+    else:   # chatLogId 가 없으면 보낸 사람, 시각, 본문으로 같은 메시지를 알아본다
+        msg_id = "h" + hashlib.sha256(json.dumps([m["sender"], m["time"], m["text"]],
+                                                 ensure_ascii=False).encode()).hexdigest()[:20]
+    key = f"kakao:{msg_id}"
+    if (event_id := events.find_event_id(key)) is not None:
+        return event_id, False
+    settings = get_settings()
+    m["date_text"] = format_date(m["time"])
+    m["received_at"] = datetime.now(settings.tz).isoformat(timespec="seconds")
+    # 짧은 답장("네 그때 봬요")도 무슨 말인지 알 수 있게 앞 메시지를 붙인다.
+    # 방 이름이 없으면 같은 사람이 보낸 것만 모은다 (1:1 방이면 그 방의 대화다).
+    m["context"] = events.recent_kakao(m["room"], m["sender"], KAKAO_CONTEXT)
+    path = settings.raw_dir / "kakao" / day_folder(m["date_text"] or m["received_at"]) / f"{msg_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
+    return _register("kakao", key, m, path)
 
 
 async def ingest_attachment(stream: AsyncIterator[bytes], message_key: str, part_id: str,

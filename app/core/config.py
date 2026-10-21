@@ -42,6 +42,10 @@ class Settings(BaseSettings):
 
     # MMS 는 본문 POST 뒤에 첨부 PUT 이 이어지므로, 마지막 수신 후 이만큼 기다렸다 처리한다.
     message_settle_seconds: int = Field(default=30, ge=0)
+    # 받을 카카오톡 알림 채널 (JSON 목록). 알림에 방 이름도 오픈채팅 여부도 없어서 채널로 거른다.
+    # new_message_v6 는 알림을 켠 방, quiet_new_message 는 알림을 끈 방과 카톡 방해금지 시간대의 메시지다.
+    # 오픈채팅방은 카톡에서 알림을 꺼 두면 quiet 로 빠진다.
+    kakao_channels: list[str] = ["new_message_v6"]
     worker_poll_seconds: float = Field(default=3.0, gt=0)
     worker_max_attempts: int = Field(default=5, ge=1)
 
