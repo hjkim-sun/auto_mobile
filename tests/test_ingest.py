@@ -152,11 +152,12 @@ def test_health_counts_events(client):
 
 
 
-def kakao(sender="홍길동", text="내일 3시에 봬요", chat_log_id=3900000000000000000, channel="new_message_v6"):
+def kakao(sender="홍길동", text="내일 3시에 봬요", chat_log_id=3900000000000000000, channel="new_message_v6",
+          group=False):
     """Automate Notification posted? 출력을 그대로 jsonEncode 한 모양 (값은 가짜). title 은 보낸 사람이다."""
     return {"title": sender, "message": text, "ticker": f"{sender} : {text}", "when": 1792592690.867,
             "channel": channel,
-            "extras": {"android.title": sender, "android.text": text, "android.isGroupConversation": True,
+            "extras": {"android.title": sender, "android.text": text, "android.isGroupConversation": group,
                        "android.hiddenConversationTitle": None, "android.selfDisplayName": "나",
                        "threadId": 0, "chatLogId": chat_log_id}}
 
@@ -167,7 +168,7 @@ def test_kakao_message_is_stored_and_deduplicated(client):
     assert res.json() == {"event_id": 1, "duplicate": False, "ignored": False}
 
     stored = json.loads((get_settings().raw_dir / "kakao/20261021/3900000000000000000.json").read_text())
-    assert stored["sender"] == "홍길동" and stored["room"] is None
+    assert stored["sender"] == "홍길동" and stored["room"] is None and stored["group"] is False
     assert stored["date_text"] == "2026-10-21 23:24:50"
     assert stored["context"] == []
 

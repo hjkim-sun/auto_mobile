@@ -77,7 +77,7 @@ def render_message(msg: dict) -> str | None:
 
 
 def render_kakao(msg: dict) -> str:
-    lines = ["[카카오톡]" + (f" 방: {msg['room']}" if msg.get("room") else ""),
+    lines = ["[카카오톡" + (" 단톡" if msg.get("group") else "") + "]" + (f" 방: {msg['room']}" if msg.get("room") else ""),
              f"보낸 사람: {msg.get('sender')}", f"시각: {msg.get('date_text')}"]
     if msg.get("context"):
         # 앞 메시지. 짧은 답장("네 그때 봬요")도 무슨 말인지 알 수 있게 붙인다

@@ -58,7 +58,7 @@ payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위
 카카오톡 알림의 `title` 은 방 이름이 아니라 마지막 메시지를 보낸 사람이고, 단톡방 이름과 오픈채팅 여부는 알림에 없다.
 그래서 알림 채널로 거른다. `KAKAO_CHANNELS`(기본 `["new_message_v6"]`, 알림을 켠 방)에 없는 채널과 묶음 요약 알림은 200 `{"ignored": true}`.
 오픈채팅방은 카톡에서 알림을 끄면 `quiet_new_message` 로 빠져 받지 않는다. 카톡 자체 방해금지 시간대에 온 메시지도 같은 채널이라 놓친다.
-payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `text`, `time`, `chat_log_id`, `context`(같은 보낸 사람의 앞 메시지 5건)다.
+payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단톡 여부), `text`, `time`, `chat_log_id`, `context`(같은 보낸 사람의 앞 메시지 5건)다.
 
 판별 내역(`/v1/verdicts/*`)은 최신순으로 `{"items": [...], "next_before_id"}` 를 돌려준다.
 `status` 는 `pending|processing|kept|discarded|failed`, 다음 페이지는 `?before_id=<next_before_id>`.
