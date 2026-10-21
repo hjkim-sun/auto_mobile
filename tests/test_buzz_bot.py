@@ -135,6 +135,8 @@ def test_free_text_goes_to_agent_and_commands_do_not(fake_buzz, fake_agent):
     assert fake_agent == [{"channel": "dm-1", "text": "안함2 안함 4", "sender": "주인", "owner": True,
                            "history": []}]
     assert fake_buzz.reactions == ["b"] and fake_buzz.threads[1] == ("dm-1", None)
+    turn = buzz_bot.agent_turns.recent()[0]   # 웹 흐름 화면에 보여 줄 기록
+    assert (turn["question"], turn["answer"], turn["ok"], turn["is_owner"]) == ("안함2 안함 4", "에이전트 답: 안함2 안함 4", 1, 1)
 
 
 def test_channel_mentions_are_answered_in_thread_with_peer_limit(fake_buzz, fake_agent, monkeypatch):

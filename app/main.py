@@ -10,6 +10,8 @@ from app.api.health import router as health_router
 from app.api.ingest import router as ingest_router
 from app.api.transcriptions import router as transcriptions_router
 from app.api.verdicts import router as verdicts_router
+from app.api.web import api as web_api_router
+from app.api.web import router as web_router
 from app.db.session import init_db
 from app.services import transcribe
 from app.services.ingest import IngestError
@@ -28,6 +30,8 @@ app.include_router(ingest_router)
 app.include_router(verdicts_router)
 app.include_router(transcriptions_router)
 app.include_router(health_router)
+app.include_router(web_router)
+app.include_router(web_api_router)
 
 # API 문서는 VPS 안에서 localhost:8080 으로 직접 붙을 때만 연다.
 # Caddy 를 거친 요청은 항상 X-Forwarded-For 가 붙고, uvicorn 은 127.0.0.1 에서만 받으므로 밖에서 직접 올 수 없다.

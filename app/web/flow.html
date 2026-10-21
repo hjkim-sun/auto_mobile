@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auto_mobile 흐름</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0c10;
+  --surface: #15161b;
+  --surface-2: #1d1f26;
+  --line: #2a2c35;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --muted: #8a897f;
+  --accent: #3987e5;
+  --call: #3987e5;
+  --message: #d95926;
+  --email: #199e70;
+  --kakao: #c98500;
+  --other: #8a897f;
+  --wiki: #9085e9;
+  --calendar: #2fa84f;
+  --buzz: #d55181;
+  --trash: #5b5a55;
+  --good: #2fa84f;
+  --critical: #e66767;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Noto Sans KR", system-ui, sans-serif; }
+button { font: inherit; color: inherit; }
+header { height: 56px; display: flex; align-items: center; gap: 20px; padding: 0 20px; }
+.brand { font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.brand span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+nav { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+nav a { white-space: nowrap; padding: 5px 12px; border-radius: 7px; color: var(--text-2); text-decoration: none; font-size: 14px; }
+nav a.on { background: var(--surface-2); color: var(--text); }
+.live { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 rgba(47,168,79,.6);
+  animation: pulse 2s infinite; }
+.live.off i { background: var(--critical); animation: none; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(47,168,79,0); } 100% { box-shadow: 0 0 0 0 rgba(47,168,79,0); } }
+
+main { max-width: 1280px; margin: 0 auto; padding: 8px 20px 40px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.kpi .v { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.kpi .l { font-size: 12px; color: var(--muted); }
+.kpi .s { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+
+.lane { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 8px; margin-bottom: 18px; }
+.lane-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lane h2 { margin: 0; font-size: 16px; }
+.lane h2 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 13px; }
+.lane .btn { margin-left: auto; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 6px 12px;
+  cursor: pointer; font-size: 13px; }
+.lane .btn:hover { border-color: var(--accent); }
+svg.flow { width: 100%; height: auto; display: block; }
+svg.flow .box rect.frame { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; transition: stroke .3s; }
+svg.flow .box.flash rect.frame { stroke: var(--hl, var(--accent)); stroke-width: 2.4; }
+svg.flow .box.dim { opacity: .45; }
+svg.flow .t { fill: var(--text); font-size: 15px; font-weight: 500; }
+svg.flow .n { fill: var(--text); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+svg.flow .s { fill: var(--muted); font-size: 12px; }
+svg.flow .bar { fill: var(--hl); }
+svg.flow path.wire { fill: none; stroke: var(--line); stroke-width: 2; }
+svg.flow .edge { fill: var(--text-2); font-size: 12px; }
+svg.flow .edge-bg { fill: var(--surface); }
+
+.cols { display: grid; grid-template-columns: 3fr 2fr; gap: 18px; }
+@media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; min-width: 0; }
+.card h2 { margin: 0 0 10px; font-size: 15px; }
+.feed { display: flex; flex-direction: column; }
+.row { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 9px 0;
+  border-top: 1px solid var(--line); font-size: 13px; }
+.row:first-child { border-top: 0; }
+.row.new { animation: arrive 1.6s ease-out; }
+@keyframes arrive { from { background: rgba(57,135,229,.18); } to { background: transparent; } }
+.row .dot { width: 10px; height: 10px; border-radius: 50%; justify-self: center; }
+.row .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.row .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.steps { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.step { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.step.done { color: var(--text); box-shadow: inset 0 0 0 1px var(--c, var(--line)); }
+.step.drop { color: var(--muted); text-decoration: line-through; }
+.turn { border-top: 1px solid var(--line); padding: 10px 0; font-size: 13px; }
+.turn:first-of-type { border-top: 0; }
+.q, .a { padding: 8px 11px; border-radius: 12px; max-width: 92%; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.q { background: var(--accent); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; width: fit-content; }
+.a { background: var(--surface-2); color: var(--text-2); margin-top: 6px; border-bottom-left-radius: 4px; width: fit-content; }
+.turn .meta { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.empty { color: var(--muted); font-size: 13px; padding: 12px 0; line-height: 1.6; }
+@media (max-width: 720px) { .brand span { display: none; } header { padding: 0 16px; } main { padding: 8px 16px 32px; } .live span { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">auto_mobile<span>흐름</span></div>
+  <nav><a href="/web/flow" class="on">흐름</a><a href="/web/wiki">위키 그래프</a></nav>
+  <div class="live" id="live"><i></i><span>실시간</span></div>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="lane">
+    <div class="lane-head">
+      <h2>① 들어온 것을 가려서 정리하고 알린다<small>문자·메일·통화·카카오톡 → Jev 판별 → 위키·캘린더 → Buzz</small></h2>
+      <button class="btn" id="replay1">흐름 재생</button>
+    </div>
+    <svg class="flow" id="flow1" viewBox="0 0 1200 330" role="img" aria-label="수신부터 알림까지의 흐름"></svg>
+  </section>
+
+  <section class="lane">
+    <div class="lane-head">
+      <h2>② Buzz 에서 물으면 위키로 답하고 일정을 고친다<small>주인 → 에이전트(Claude Code) → 위키·이벤트·캘린더</small></h2>
+      <button class="btn" id="replay2">흐름 재생</button>
+    </div>
+    <svg class="flow" id="flow2" viewBox="0 0 1200 270" role="img" aria-label="Buzz 질문과 답의 흐름"></svg>
+  </section>
+
+  <div class="cols">
+    <section class="card"><h2>최근 들어온 것</h2><div class="feed" id="feed"></div></section>
+    <section class="card"><h2>Buzz 대화</h2><div id="turns"></div></section>
+  </div>
+</main>
+
+<script>
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const NS = "http://www.w3.org/2000/svg";
+const SOURCES = [["message", "문자", "SMS·MMS"], ["email", "메일", "네이버·Gmail"], ["call", "통화", "녹음 → 전사"], ["kakao", "카카오톡", "대화"]];
+const LABEL = Object.fromEntries(SOURCES.map(s => [s[0], s[1]]));
+const POLL_MS = 5000;
+
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.append(e);
+  return e;
+}
+function box(svg, id, x, y, w, h, title, sub, color) {
+  const g = el("g", { class: "box", id }, svg);
+  g.style.setProperty("--hl", color);
+  el("rect", { class: "frame", x, y, width: w, height: h, rx: 12 }, g);
+  el("rect", { class: "bar", x, y: y + 12, width: 4, height: h - 24, rx: 2 }, g);
+  const t = el("text", { class: "t", x: x + 18, y: y + 26 }, g); t.textContent = title;
+  const n = el("text", { class: "n", x: x + 18, y: y + h - 16 }, g); n.textContent = "–";
+  const s = el("text", { class: "s", x: x + w - 12, y: y + h - 18, "text-anchor": "end" }, g); s.textContent = sub;
+  return { g, n, s, x, y, w, h, cx: x + w / 2, cy: y + h / 2 };
+}
+function wire(svg, id, d, label, at) {
+  const p = el("path", { class: "wire", id, d }, svg.querySelector(".wires"));
+  if (label !== undefined) {
+    const t = el("text", { class: "edge", "text-anchor": "middle", id: id + "-label" }, svg.querySelector(".labels"));
+    const pt = p.getPointAtLength(p.getTotalLength() * (at ?? .5));
+    t.setAttribute("x", pt.x); t.setAttribute("y", pt.y - 8); t.textContent = label;
+  }
+  return p;
+}
+function layers(svg) { el("g", { class: "wires" }, svg); el("g", { class: "labels" }, svg); el("g", { class: "fx" }, svg); }
+const curve = (x1, y1, x2, y2) => `M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`;
+
+// ① 수신 → 판별 → 위키·캘린더 → 알림
+const f1 = document.getElementById("flow1"); layers(f1);
+const B1 = {};
+SOURCES.forEach(([k, label, sub], i) => { B1[k] = box(f1, "b-" + k, 10, 12 + i * 78, 190, 66, label, sub, css("--" + k)); });
+B1.jev = box(f1, "b-jev", 330, 110, 200, 100, "Jev 판별", "쓸모 있음", css("--accent"));
+B1.trash = box(f1, "b-trash", 600, 250, 180, 66, "버림", "노이즈", css("--trash"));
+B1.wiki = box(f1, "b-wiki", 640, 12, 190, 78, "LLM 위키", "페이지", css("--wiki"));
+B1.cal = box(f1, "b-cal", 900, 12, 170, 78, "네이버 캘린더", "일정", css("--calendar"));
+B1.buzz = box(f1, "b-buzz", 990, 130, 200, 90, "Buzz 알림", "브리핑", css("--buzz"));
+el("rect", { x: 348, y: 148, width: 164, height: 8, rx: 4, fill: css("--line") }, B1.jev.g);
+const jevGauge = el("rect", { x: 348, y: 148, width: 0, height: 8, rx: 4, fill: css("--accent") }, B1.jev.g);
+const P1 = {};
+for (const [k] of SOURCES) P1[k] = wire(f1, "w-" + k, curve(200, B1[k].cy, 330, 160));
+P1.trash = wire(f1, "w-trash", curve(530, 185, 600, 283), "", .55);
+P1.wiki = wire(f1, "w-wiki", curve(530, 135, 640, 51), "", .5);
+P1.brief = wire(f1, "w-brief", curve(530, 168, 990, 175), "", .5);
+P1.cal = wire(f1, "w-cal", curve(830, 51, 900, 51), "");
+P1.calBuzz = wire(f1, "w-calbuzz", curve(1070, 51, 1090, 130), "");
+
+// ② 질문 → 에이전트 → 위키·이벤트·캘린더 → 답
+const f2 = document.getElementById("flow2"); layers(f2);
+const B2 = {
+  owner: box(f2, "b-owner", 10, 95, 200, 80, "주인 (Buzz 앱)", "질문", css("--buzz")),
+  agent: box(f2, "b-agent", 450, 85, 230, 100, "Buzz 에이전트", "Claude Code", css("--accent")),
+  wiki: box(f2, "b-wiki2", 900, 10, 200, 70, "위키 읽기", "근거 페이지", css("--wiki")),
+  tools: box(f2, "b-tools", 900, 100, 200, 70, "이벤트 조회", "MCP 도구", css("--message")),
+  cal: box(f2, "b-cal2", 900, 190, 200, 70, "일정 등록/안함", "캘린더", css("--calendar")),
+};
+const P2 = {
+  ask: wire(f2, "w-ask", curve(210, 120, 450, 120), "질문"),
+  answer: wire(f2, "w-answer", curve(450, 150, 210, 150), "답 (#번호 근거)"),
+  wiki: wire(f2, "w-wiki2", curve(680, 110, 900, 45)),
+  tools: wire(f2, "w-tools", curve(680, 135, 900, 135)),
+  cal: wire(f2, "w-cal2", curve(680, 160, 900, 225)),
+};
+
+// 점이 선을 따라 흐른다
+function particle(path, color, ms = 900, big = true) {
+  return new Promise(resolve => {
+    const svg = path.ownerSVGElement, len = path.getTotalLength(), start = performance.now();
+    const g = el("g", {}, svg.querySelector(".fx"));
+    const glow = el("circle", { r: big ? 11 : 6, fill: color, opacity: big ? .25 : .12 }, g);
+    const dot = el("circle", { r: big ? 5 : 2.5, fill: color, opacity: big ? 1 : .55 }, g);
+    (function frame(now) {
+      const t = Math.min(1, (now - start) / ms), e = t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+      const p = path.getPointAtLength(e * len);
+      for (const c of [glow, dot]) { c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); }
+      if (t < 1) requestAnimationFrame(frame); else { g.remove(); resolve(); }
+    })(start);
+  });
+}
+function flash(b, color) {
+  if (color) b.g.style.setProperty("--hl", color);
+  b.g.classList.add("flash");
+  setTimeout(() => b.g.classList.remove("flash"), 700);
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// 이벤트 하나가 실제로 거친 길을 따라간다
+async function journey(e) {
+  const color = css("--" + e.source) || css("--other"), src = B1[e.source];
+  if (src) flash(src, color);
+  await particle(P1[e.source] || P1.message, color);
+  flash(B1.jev);
+  if (e.status === "discarded") { await particle(P1.trash, css("--trash")); flash(B1.trash); return; }
+  if (e.status !== "kept") return;
+  const tasks = [];
+  if (e.notified_at || !e.wiki_at) tasks.push(particle(P1.brief, color, 1300).then(() => flash(B1.buzz)));
+  if (e.wiki_at) tasks.push(particle(P1.wiki, color).then(async () => {
+    flash(B1.wiki);
+    if (e.calendar.length) {
+      await particle(P1.cal, css("--calendar")); flash(B1.cal);
+      await particle(P1.calBuzz, css("--calendar"), 600); flash(B1.buzz);
+    }
+  }));
+  await Promise.all(tasks);
+}
+async function conversation(turn) {
+  flash(B2.owner);
+  await particle(P2.ask, css("--buzz"));
+  flash(B2.agent);
+  const calendarish = /등록|안함|일정|캘린더/.test(turn?.question || "");
+  await Promise.all([particle(P2.wiki, css("--wiki")).then(() => flash(B2.wiki)),
+                     particle(P2.tools, css("--message"), 1100).then(() => flash(B2.tools)),
+                     calendarish ? particle(P2.cal, css("--calendar"), 1300).then(() => flash(B2.cal)) : null]);
+  await sleep(250);
+  flash(B2.agent);
+  await particle(P2.answer, css("--accent"), 1000);
+  flash(B2.owner);
+}
+
+// 가만히 있을 때도 선 위로 흐릿한 점을 흘려 살아 있는 화면으로 둔다
+const pick = xs => xs[Math.floor(Math.random() * xs.length)];
+setInterval(() => {
+  if (document.hidden) return;
+  const k = pick(SOURCES.map(s => s[0]).filter(k => state.counts?.sources?.[k]));
+  if (k) particle(P1[k], css("--" + k), 1600, false);
+  const ps = [P1.wiki, P1.brief, P2.ask, P2.answer];
+  particle(pick(ps), css("--muted"), 1800, false);
+}, 1100);
+
+// 숫자
+const fmtN = n => (n ?? 0).toLocaleString();
+function dur(s) {
+  if (s == null) return "–";
+  if (s < 60) return Math.round(s) + "초";
+  if (s < 3600) return Math.round(s / 60) + "분";
+  if (s < 86400) return (s / 3600).toFixed(1).replace(/\.0$/, "") + "시간";
+  return (s / 86400).toFixed(1).replace(/\.0$/, "") + "일";
+}
+function kpi(label, value, sub) {
+  const d = document.createElement("div"); d.className = "kpi";
+  d.innerHTML = '<div class="l"></div><div class="v"></div><div class="s"></div>';
+  d.children[0].textContent = label; d.children[1].textContent = value; d.children[2].textContent = sub || "";
+  return d;
+}
+function render(data) {
+  const c = data.counts, total = Object.values(c.sources).reduce((a, s) => a + Object.values(s).reduce((x, y) => x + y, 0), 0);
+  const judged = c.kept + c.discarded, pages = Object.values(c.wiki_pages).reduce((a, b) => a + b, 0);
+  const cal = c.calendar;
+  const k = document.getElementById("kpis"); k.innerHTML = "";
+  k.append(kpi("받은 것", fmtN(total), c.waiting ? `${c.waiting}건 처리 중` : "모두 처리됨"),
+           kpi("남김", fmtN(c.kept), judged ? `${Math.round(c.kept / judged * 100)}% · 판별 ${dur(data.latency.judge)}` : ""),
+           kpi("노이즈로 버림", fmtN(c.discarded), "알리지 않음"),
+           kpi("위키 페이지", fmtN(pages), `연결 ${fmtN(c.wiki_links)}`),
+           kpi("캘린더 등록", fmtN(cal.added || 0), `물어본 일정 ${fmtN(c.calendar_asked)}`),
+           kpi("Buzz 알림", fmtN(c.notified), `알림까지 ${dur(data.latency.notify)}`),
+           kpi("Buzz 대화", fmtN(c.agent_turns), "에이전트 답"));
+
+  for (const [key] of SOURCES) {
+    const s = c.sources[key] || {}, n = Object.values(s).reduce((a, b) => a + b, 0);
+    B1[key].n.textContent = fmtN(n);
+    B1[key].g.classList.toggle("dim", !n);
+    if (key === "kakao" && !n) B1[key].s.textContent = "연결 예정";
+  }
+  B1.jev.n.textContent = judged ? `${Math.round(c.kept / judged * 100)}%` : "–";
+  jevGauge.setAttribute("width", judged ? 164 * c.kept / judged : 0);
+  B1.trash.n.textContent = fmtN(c.discarded);
+  B1.wiki.n.textContent = fmtN(pages);
+  B1.cal.n.textContent = fmtN(cal.added || 0);
+  B1.buzz.n.textContent = fmtN(c.notified);
+  const set = (id, text) => { const t = document.getElementById(id); if (t) t.textContent = text; };
+  set("w-brief-label", `브리핑 · ${dur(data.latency.notify)}`);
+  set("w-wiki-label", `정리 · ${dur(data.latency.wiki)}`);
+  set("w-trash-label", "알리지 않음");
+  set("w-cal-label", "일정 고르기");
+
+  B2.owner.n.textContent = fmtN(c.agent_turns);
+  B2.agent.n.textContent = data.turns.length && data.turns[0].seconds != null ? dur(data.turns[0].seconds) : "–";
+  B2.agent.s.textContent = data.turns.length ? "최근 답 시간" : "Claude Code";
+  B2.wiki.n.textContent = fmtN(pages);
+  B2.tools.n.textContent = fmtN(total);
+  B2.cal.n.textContent = fmtN((cal.added || 0) + (cal.declined || 0));
+  B2.cal.s.textContent = `대기 ${fmtN((cal.asking || 0) + (cal.pending || 0))}`;
+
+  renderFeed(data.recent);
+  renderTurns(data.turns);
+}
+
+const seen = { events: null, turns: null };
+function renderFeed(rows) {
+  const feed = document.getElementById("feed"); feed.innerHTML = "";
+  if (!rows.length) { feed.innerHTML = '<div class="empty">아직 들어온 것이 없습니다.</div>'; return; }
+  for (const e of rows) {
+    const r = document.createElement("div"); r.className = "row" + (seen.events && !seen.events.has(e.id) ? " new" : "");
+    const color = css("--" + e.source) || css("--other");
+    r.innerHTML = '<span class="dot"></span><div style="min-width:0"><div class="title"></div><div class="meta"></div></div><div class="steps"></div>';
+    r.querySelector(".dot").style.background = color;
+    r.querySelector(".title").textContent = e.title;
+    const when = new Date(e.received_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    r.querySelector(".meta").textContent = `#${e.id} · ${LABEL[e.source] || e.source} · ${when}` + (e.useful != null ? ` · 쓸모 ${Math.round(e.useful * 100)}%` : "");
+    const steps = r.querySelector(".steps");
+    const step = (label, done, c, drop) => { const s = document.createElement("span"); s.className = "step" + (done ? " done" : "") + (drop ? " drop" : "");
+      if (c) s.style.setProperty("--c", c); s.textContent = label; steps.append(s); };
+    if (e.status === "discarded") step("버림", true, css("--trash"), true);
+    else if (e.status === "kept") {
+      step("남김", true, css("--accent"));
+      step("위키", !!e.wiki_at, css("--wiki"));
+      step("알림", !!e.notified_at, css("--buzz"));
+      for (const c of e.calendar) step(c.status === "added" ? "일정 등록" : c.status === "declined" ? "일정 안함" : "일정 질문", c.status !== "pending", css("--calendar"));
+    } else step({ transcribing: "전사 중", pending: "판별 대기", processing: "판별 중", failed: "실패" }[e.status] || e.status, e.status === "failed", css("--critical"));
+    feed.append(r);
+  }
+}
+function renderTurns(turns) {
+  const box = document.getElementById("turns"); box.innerHTML = "";
+  if (!turns.length) {
+    box.innerHTML = '<div class="empty">아직 기록된 대화가 없습니다. Buzz 에서 봇에게 "내일 일정 뭐야?"처럼 물어보면 여기에 질문과 답이 쌓입니다.</div>';
+    return;
+  }
+  for (const t of turns) {
+    const d = document.createElement("div"); d.className = "turn";
+    d.innerHTML = '<div class="q"></div><div class="a"></div><div class="meta"></div>';
+    d.children[0].textContent = t.question; d.children[1].textContent = t.answer;
+    if (!t.ok) d.children[1].style.color = css("--critical");
+    d.children[2].textContent = `${new Date(t.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · 답까지 ${dur(t.seconds)}` + (t.owner ? "" : " · 다른 에이전트");
+    box.append(d);
+  }
+}
+
+// 갱신: 새 이벤트·대화가 보이면 그 길을 따라 점을 흘린다
+const state = {};
+async function poll() {
+  try {
+    const res = await fetch("/flow/stats", { credentials: "same-origin" });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    Object.assign(state, data);
+    const prevEvents = seen.events, prevTurns = seen.turns;
+    render(data);
+    seen.events = new Map(data.recent.map(e => [e.id, e.status + (e.wiki_at ? "w" : "") + (e.notified_at ? "n" : "")]));
+    seen.turns = new Set(data.turns.map(t => t.id));
+    if (prevEvents) for (const e of [...data.recent].reverse()) {
+      const sig = seen.events.get(e.id);
+      if (prevEvents.get(e.id) !== sig) journey(e);
+    }
+    if (prevTurns) for (const t of [...data.turns].reverse()) if (!prevTurns.has(t.id)) conversation(t);
+    document.getElementById("live").classList.remove("off");
+  } catch {
+    document.getElementById("live").classList.add("off");
+  }
+}
+poll(); setInterval(poll, POLL_MS);
+
+// 재생: 최근 이벤트를 오래된 것부터 차례로 흘려 보낸다 (영상 촬영용)
+document.getElementById("replay1").onclick = async () => {
+  const rows = [...(state.recent || [])].reverse().slice(-10);
+  for (const e of rows) { journey(e); await sleep(650); }
+};
+document.getElementById("replay2").onclick = async () => {
+  const turns = [...(state.turns || [])].reverse();
+  for (const t of (turns.length ? turns.slice(-3) : [null])) { await conversation(t); await sleep(300); }
+};
+</script>
+</body>
+</html>

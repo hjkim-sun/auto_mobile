@@ -76,6 +76,17 @@ CREATE TABLE IF NOT EXISTS calendar_items (  -- 위키 빌더가 고른 캘린�
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS agent_turns (     -- Buzz 에이전트가 답한 말. 웹 흐름 화면(/web/flow)에 보여 준다
+    id           INTEGER PRIMARY KEY,
+    channel      TEXT NOT NULL,
+    is_owner     INTEGER NOT NULL,
+    question     TEXT NOT NULL,
+    answer       TEXT,
+    ok           INTEGER NOT NULL,         -- 에이전트 오류면 0
+    started_at   TEXT NOT NULL,
+    finished_at  TEXT NOT NULL
+);
 """
 
 

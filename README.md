@@ -42,6 +42,8 @@ uv run pytest
 | POST | `/v1/transcriptions` | `{"input_path", "output_dir"?, "language"?}` |
 | GET | `/v1/transcriptions/{id}` | |
 | GET | `/v1/health` | |
+| GET | `/web/flow`, `/web/wiki` | 웹 화면 (아래 "웹 화면") |
+| GET | `/wiki/graph`, `/wiki/page?path=`, `/flow/stats` | 웹 화면용 JSON |
 
 수신(`/v1/ingest/*`)은 새로 받으면 201, 이미 받은 것이면 200. 응답 body 는 `{"event_id", "duplicate"}`.
 통화녹음(`/v1/ingest/calls`)은 새로 받으면 곧바로 `transcripts/calls/YYYYMMDD`(원본과 같은 날짜 폴더) 로 전사를 접수하고 응답에 `transcription_id` 를 붙인다
@@ -202,6 +204,27 @@ data/wiki/
   people/  orgs/  topics/
 ```
 
+## 웹 화면
+
+영상이나 데모에서 시나리오를 보여 주는 화면이다. 위키에 개인 정보가 있어서 `WEB_TOKEN` 을 비우면 화면과 그 API 가 모두 404 다.
+처음에는 `https://<도메인>/web/flow?token=<WEB_TOKEN>` 으로 연다. 토큰은 30일짜리 쿠키(HttpOnly)로 남고, 주소에서 토큰을 뺀 곳으로 옮겨 간다.
+JSON API 는 그 쿠키나 `Authorization: Bearer <WEB_TOKEN>` 으로 연다. `INGEST_TOKEN` 과는 따로 둔다(폰 토큰을 브라우저에 넣지 않게).
+
+- `/web/flow` 흐름: 시나리오 두 개를 그린 화면.
+  ① 문자·메일·통화(·카카오톡) → Jev 판별 → 위키·캘린더 → Buzz 알림. ② Buzz 질문 → 에이전트 → 위키·이벤트·캘린더 → 답.
+  상자마다 실제 건수를, 선마다 단계별로 걸린 시간의 중앙값(최근 kept 30건)을 붙인다. 5초마다 `/flow/stats` 를 다시 읽고,
+  새 이벤트나 상태가 바뀐 이벤트, 새 대화가 보이면 그 이벤트가 실제로 거친 길을 따라 점이 흐른다.
+  "흐름 재생" 은 최근 이벤트 10건(대화 3건)을 차례로 다시 흘린다. 아래에는 최근 이벤트의 단계(남김, 위키, 알림, 일정)와 Buzz 대화가 나온다.
+  대화는 봇이 에이전트로 답할 때마다 `agent_turns` 테이블에 남긴 것이다.
+- `/web/wiki` 위키 그래프: `data/wiki` 의 페이지를 노드로, 페이지 사이 마크다운 링크를 선으로 그린다(force-graph).
+  색은 사람·기관·주제·일정, 자료(`sources/`)는 들어온 채널(통화·문자·메일·카카오톡)이다. `index.md`, `log.md` 는 뺀다.
+  노드를 누르면 페이지 본문과 이어진 페이지가 나오고, 본문의 링크를 누르면 그 노드로 옮겨 간다.
+  아래 재생 버튼은 위키 git 이력에서 파일이 처음 커밋된 시각 순서로 그래프가 자라는 과정을 20초 안에 다시 보여 준다.
+  30초마다 다시 읽어 새로 생긴 노드는 반짝이며 나타난다.
+  자료 노드가 1500개를 넘으면(카카오톡 대화를 넣은 뒤 등) 처음에는 자료를 숨기고 사람·기관·주제만 그린다. 왼쪽 필터에서 켤 수 있다.
+  그래프는 파일 수와 마지막 수정 시각, 위키 HEAD 가 같으면 다시 만들지 않는다.
+- 새 이벤트 종류(예: `kakao`)는 `events.source` 값 그대로 색과 이름이 붙는다. 이름은 화면의 `SOURCES` 에, 색은 `--kakao` 처럼 CSS 변수에 있다.
+
 ## 저장 경로 (`DATA_DIR`, 기본 `data/`)
 
 ```
@@ -225,12 +248,13 @@ data/
 ```
 app/
   main.py               FastAPI 앱
-  api/                  라우터 (ingest, verdicts, transcriptions, health, deps)
+  api/                  라우터 (ingest, verdicts, transcriptions, health, web, deps)
+  web/                  웹 화면 HTML (flow.html, wiki.html)
   core/config.py        Settings (.env)
   db/session.py         SQLite 연결·스키마
   repositories/events.py  events 큐
   schemas/              응답 모델
-  services/             수신 저장, 판별 텍스트 변환, 프롬프트 로드, Jev 호출, 음성 전사
+  services/             수신 저장, 판별 텍스트 변환, 프롬프트 로드, Jev 호출, 음성 전사, 위키 그래프·흐름 통계
 prompts/                판별 프롬프트 (이벤트 종류별 .toml), 위키 규칙(wiki.md), 에이전트 규칙(agent.md)
   jobs/worker.py        판별 워커
   jobs/mail_poller.py   IMAP 메일 폴러

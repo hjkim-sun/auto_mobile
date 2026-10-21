@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>위키 그래프</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/force-graph@1.51.5/dist/force-graph.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@18.0.13/lib/marked.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.15/dist/purify.min.js"></script>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0c10;
+  --surface: #15161b;
+  --surface-2: #1d1f26;
+  --line: #2a2c35;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --muted: #8a897f;
+  --accent: #3987e5;
+  /* 노드 색. 자료(source)는 들어온 채널, 나머지는 페이지 종류 */
+  --call: #3987e5;
+  --message: #d95926;
+  --email: #199e70;
+  --kakao: #c98500;
+  --other: #8a897f;
+  --person: #9085e9;
+  --org: #2fa84f;
+  --topic: #d55181;
+  --schedule: #e66767;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font-family: "Noto Sans KR", system-ui, sans-serif; overflow: hidden; }
+button, input { font: inherit; color: inherit; }
+a { color: var(--accent); }
+
+header { position: fixed; inset: 0 0 auto 0; height: 56px; display: flex; align-items: center; gap: 20px;
+  padding: 0 20px; z-index: 5; background: linear-gradient(var(--bg), rgba(11,12,16,0)); }
+.brand { font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.brand span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+nav { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+nav a { white-space: nowrap; padding: 5px 12px; border-radius: 7px; color: var(--text-2); text-decoration: none; font-size: 14px; }
+nav a.on { background: var(--surface-2); color: var(--text); }
+.stats { margin-left: auto; display: flex; gap: 18px; font-size: 13px; color: var(--muted); }
+.stats b { color: var(--text); font-size: 18px; font-variant-numeric: tabular-nums; margin-right: 4px; }
+
+#graph { position: fixed; inset: 0; }
+
+.panel { position: fixed; z-index: 4; background: rgba(21,22,27,.88); backdrop-filter: blur(10px);
+  border: 1px solid var(--line); border-radius: 14px; }
+#filters { top: 68px; left: 16px; width: 228px; padding: 14px; font-size: 13px; }
+#filters .top { display: flex; gap: 6px; }
+#filters .fold { display: none; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 0 10px; cursor: pointer; }
+#filters input[type=search] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); outline: none; }
+#filters input[type=search]:focus { border-color: var(--accent); }
+#filters h3 { margin: 14px 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .08em; }
+.chip { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; border: 0; background: none;
+  border-radius: 6px; cursor: pointer; text-align: left; color: var(--text-2); }
+.chip:hover { background: var(--surface-2); }
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.chip .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip.off { opacity: .35; }
+.chip.off .dot { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--muted); }
+#results { margin-top: 6px; max-height: 180px; overflow: auto; }
+#results button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 5px 6px;
+  border-radius: 6px; cursor: pointer; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#results button:hover { background: var(--surface-2); color: var(--text); }
+
+#detail { top: 68px; right: 16px; bottom: 96px; width: min(420px, calc(100vw - 32px)); padding: 18px 20px;
+  overflow: auto; display: none; }
+#detail.open { display: block; }
+#detail .close { position: sticky; top: 0; float: right; border: 0; background: var(--surface-2); width: 28px; height: 28px;
+  border-radius: 8px; cursor: pointer; }
+#detail .kind { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+#detail .kind .dot { width: 8px; height: 8px; border-radius: 50%; }
+#detail .md { font-size: 14px; line-height: 1.65; color: var(--text-2); }
+#detail .md h1 { font-size: 19px; color: var(--text); margin: 8px 0 12px; line-height: 1.4; }
+#detail .md h2 { font-size: 14px; color: var(--text); margin: 18px 0 6px; }
+#detail .md ul { padding-left: 18px; }
+#detail .md blockquote { margin: 8px 0; padding: 6px 12px; border-left: 3px solid var(--kakao); color: var(--text-2);
+  background: var(--surface-2); border-radius: 0 6px 6px 0; }
+#detail .md code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+#detail .linked { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+#detail .linked h2 { font-size: 12px; color: var(--muted); font-weight: 500; margin: 0 0 6px; }
+#detail .linked button { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: none; padding: 5px 0;
+  cursor: pointer; color: var(--text-2); text-align: left; }
+#detail .linked button:hover { color: var(--text); }
+
+#timeline { left: 16px; right: 16px; bottom: 16px; height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 16px; }
+#play { width: 38px; height: 38px; flex: none; border-radius: 50%; border: 0; background: var(--accent); cursor: pointer;
+  display: grid; place-items: center; }
+#play svg { width: 16px; height: 16px; fill: #fff; }
+#scrub { flex: 1; accent-color: var(--accent); }
+#when { width: 260px; flex: none; font-size: 13px; color: var(--text-2); line-height: 1.35; }
+#when b { display: block; color: var(--text); font-variant-numeric: tabular-nums; }
+#tip { position: fixed; z-index: 6; pointer-events: none; padding: 8px 10px; border-radius: 8px; background: var(--surface-2);
+  border: 1px solid var(--line); font-size: 12px; max-width: 280px; display: none; color: var(--text-2); }
+#tip b { color: var(--text); display: block; margin-bottom: 2px; font-size: 13px; }
+#empty { position: fixed; inset: 0; display: none; place-items: center; color: var(--muted); }
+
+@media (max-width: 720px) {
+  .stats, .brand span { display: none; }
+  #filters { width: calc(100vw - 32px); max-height: 45vh; overflow: auto; }
+  #filters .fold { display: block; }
+  #filters:not(.unfold) .body { display: none; }
+  #when { width: 120px; font-size: 11px; }
+  #detail { top: auto; height: 60vh; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">auto_mobile<span>LLM 위키</span></div>
+  <nav><a href="/web/flow">흐름</a><a href="/web/wiki" class="on">위키 그래프</a></nav>
+  <div class="stats" id="stats"></div>
+</header>
+<div id="graph"></div>
+<div id="empty">위키에 아직 페이지가 없습니다.</div>
+
+<aside class="panel" id="filters">
+  <div class="top"><input type="search" id="q" placeholder="사람, 기관, 주제 찾기" autocomplete="off"><button class="fold" id="fold">필터</button></div>
+  <div id="results"></div>
+  <div class="body">
+    <h3>페이지</h3><div id="types"></div>
+    <h3>자료가 들어온 곳</h3><div id="sources"></div>
+  </div>
+</aside>
+
+<aside class="panel" id="detail"></aside>
+
+<div class="panel" id="timeline">
+  <button id="play" aria-label="성장 과정 재생"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z"/></svg></button>
+  <input type="range" id="scrub" min="0" max="0" value="0" aria-label="시점">
+  <div id="when"></div>
+</div>
+<div id="tip"></div>
+
+<script>
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const TYPES = [
+  ["person", "사람"], ["org", "기관"], ["topic", "주제"], ["schedule", "일정"], ["source", "자료"],
+];
+const SOURCES = { call: "통화", message: "문자", email: "메일", kakao: "카카오톡" };
+const sourceLabel = s => SOURCES[s] || s || "알 수 없음";
+const colorOf = n => n.type === "source" ? (css("--" + n.source) || css("--other"))
+  : (css("--" + n.type) || css("--other"));
+// 자료 노드가 많으면(카카오톡을 넣으면 수천 개) 기본으로 숨기고 사람·기관·주제만 그린다
+const MANY_SOURCES = 1500;
+const POLL_MS = 30000;
+
+const state = {
+  all: { nodes: [], links: [] }, byId: new Map(), times: [], commits: [],
+  hiddenTypes: new Set(), hiddenSources: new Set(), until: Infinity,
+  hover: null, focus: null, neighbors: new Set(), born: new Map(), playing: false,
+};
+
+const fg = ForceGraph()(document.getElementById("graph"))
+  .backgroundColor(css("--bg"))
+  .autoPauseRedraw(false)   // 멈춘 뒤에도 반짝이는 고리와 선 위의 점을 그린다
+  .nodeId("id")
+  .nodeVal(n => radius(n) ** 2)
+  .nodeCanvasObject(drawNode)
+  .nodePointerAreaPaint((n, color, ctx) => { ctx.fillStyle = color; ctx.beginPath();
+    ctx.arc(n.x, n.y, radius(n) + 3, 0, 2 * Math.PI); ctx.fill(); })
+  .linkColor(l => lit(l) ? "rgba(240,239,236,.55)" : "rgba(195,194,183,.12)")
+  .linkWidth(l => lit(l) ? 1.6 : 0.6)
+  .linkDirectionalParticles(l => lit(l) ? 2 : 0)
+  .linkDirectionalParticleWidth(2.2)
+  .linkDirectionalParticleColor(() => css("--text"))
+  .d3VelocityDecay(0.3)
+  .cooldownTime(8000)
+  .onNodeHover(n => { state.hover = n || null; setNeighbors(); document.body.style.cursor = n ? "pointer" : ""; tip(n); })
+  .onNodeClick(n => open(n.id))
+  .onBackgroundClick(() => closeDetail());
+fg.d3Force("charge").strength(n => n.type === "source" ? -25 : -90);
+fg.d3Force("gravity", (() => {
+  let nodes = [];
+  const force = alpha => { for (const n of nodes) if (Number.isFinite(n.x)) { n.vx -= n.x * 0.04 * alpha; n.vy -= n.y * 0.04 * alpha; } };
+  force.initialize = ns => { nodes = ns; };
+  return force;
+})());
+fg.d3Force("link").distance(l => (end(l.source).type === "source" || end(l.target).type === "source") ? 28 : 60);
+
+function end(x) { return typeof x === "object" ? x : state.byId.get(x); }
+function radius(n) {
+  const base = n.type === "source" ? 2.2 : n.type === "schedule" ? 7 : 4.5;
+  return base + Math.sqrt(n.degree || 0) * (n.type === "source" ? 0.6 : 1.6);
+}
+function lit(l) {
+  const a = state.hover || state.focus;
+  return a && (end(l.source) === a || end(l.target) === a);
+}
+function setNeighbors() {
+  const a = state.hover || state.focus;
+  state.neighbors = new Set();
+  if (!a) return;
+  for (const l of fg.graphData().links) {
+    if (end(l.source) === a) state.neighbors.add(end(l.target));
+    if (end(l.target) === a) state.neighbors.add(end(l.source));
+  }
+}
+
+function drawNode(n, ctx, scale) {
+  if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) return;
+  const r = radius(n), color = colorOf(n), a = state.hover || state.focus;
+  const dim = a && a !== n && !state.neighbors.has(n);
+  ctx.globalAlpha = dim ? 0.15 : 1;
+  // 새로 생긴 노드는 1.5초 동안 퍼지는 고리를 그린다
+  const born = state.born.get(n.id);
+  if (born) {
+    const t = (performance.now() - born) / 1500;
+    if (t < 1) {
+      ctx.beginPath(); ctx.arc(n.x, n.y, r + 2 + t * 22, 0, 2 * Math.PI);
+      ctx.strokeStyle = color; ctx.globalAlpha = (1 - t) * (dim ? .15 : .9); ctx.lineWidth = 2 / scale * 1.5; ctx.stroke();
+      ctx.globalAlpha = dim ? 0.15 : 1;
+    } else state.born.delete(n.id);
+  }
+  if (n.type !== "source") {
+    ctx.beginPath(); ctx.arc(n.x, n.y, r * 2.2, 0, 2 * Math.PI);
+    const g = ctx.createRadialGradient(n.x, n.y, r * .4, n.x, n.y, r * 2.2);
+    g.addColorStop(0, color + "55"); g.addColorStop(1, color + "00");
+    ctx.fillStyle = g; ctx.fill();
+  }
+  ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+  ctx.fillStyle = color; ctx.fill();
+  if (n === a) { ctx.lineWidth = 2 / scale; ctx.strokeStyle = css("--text"); ctx.stroke(); }
+
+  const showLabel = n === a || state.neighbors.has(n)
+    || (n.type !== "source" && (scale > 1.1 || n.degree >= 4 || (state.entities < 150 && scale > 0.7)))
+    || (n.type === "source" && scale > 3.2);
+  if (showLabel && !dim) {
+    const size = Math.max(10, (n.type === "source" ? 9 : 12)) / scale;
+    ctx.font = `${n.type === "source" ? 400 : 500} ${size}px "Noto Sans KR", sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    const label = shortTitle(n);
+    ctx.lineWidth = 3 / scale; ctx.strokeStyle = css("--bg"); ctx.strokeText(label, n.x, n.y + r + 2 / scale);
+    ctx.fillStyle = n.type === "source" ? css("--text-2") : css("--text");
+    ctx.fillText(label, n.x, n.y + r + 2 / scale);
+  }
+  ctx.globalAlpha = 1;
+}
+function shortTitle(n) {
+  const t = n.type === "source" ? n.title.replace(/^#\d+\s+\S+\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s*/, "") : n.title;
+  return t.length > 18 ? t.slice(0, 17) + "…" : t;
+}
+
+function tip(n) {
+  const el = document.getElementById("tip");
+  if (!n) { el.style.display = "none"; return; }
+  el.innerHTML = "";
+  const b = document.createElement("b"); b.textContent = n.title; el.append(b);
+  const kind = n.type === "source" ? `자료 · ${sourceLabel(n.source)}` : TYPES.find(t => t[0] === n.type)?.[1] || n.type;
+  el.append(`${kind} · 연결 ${n.degree}`);
+  if (n.summary) { const p = document.createElement("div"); p.style.marginTop = "4px"; p.textContent = n.summary; el.append(p); }
+  el.style.display = "block";
+}
+document.addEventListener("mousemove", e => {
+  const el = document.getElementById("tip");
+  el.style.left = Math.min(e.clientX + 14, innerWidth - 300) + "px";
+  el.style.top = (e.clientY + 14) + "px";
+});
+
+function visible(n) {
+  if (state.hiddenTypes.has(n.type)) return false;
+  if (n.type === "source" && state.hiddenSources.has(n.source || "unknown")) return false;
+  return !n.added_at || Date.parse(n.added_at) <= state.until;
+}
+function apply() {
+  const nodes = state.all.nodes.filter(visible);
+  const ids = new Set(nodes.map(n => n.id));
+  const before = new Set(fg.graphData().nodes.map(n => n.id));
+  const links = state.all.links.filter(l => ids.has(l.sid) && ids.has(l.tid));
+  // 이미 있던 노드의 위치를 이어 쓰도록 같은 객체를 넘긴다. 새로 나타난 노드는 이웃 근처에서 시작한다
+  for (const n of nodes) {
+    if (before.has(n.id)) continue;
+    if (before.size) state.born.set(n.id, performance.now());
+    if (n.x === undefined) {
+      const nb = links.find(l => (l.sid === n.id && before.has(l.tid)) || (l.tid === n.id && before.has(l.sid)));
+      const p = nb && state.byId.get(nb.sid === n.id ? nb.tid : nb.sid);
+      if (p && p.x !== undefined) { n.x = p.x + (Math.random() - .5) * 20; n.y = p.y + (Math.random() - .5) * 20; }
+    }
+  }
+  fg.graphData({ nodes, links: links.map(l => ({ ...l, source: l.sid, target: l.tid })) });
+  state.entities = nodes.filter(n => n.type !== "source").length;
+  setNeighbors();
+  renderStats(nodes, links);
+}
+
+function renderStats(nodes, links) {
+  const c = {};
+  for (const n of nodes) c[n.type] = (c[n.type] || 0) + 1;
+  const el = document.getElementById("stats");
+  el.innerHTML = "";
+  for (const [k, label] of [["person", "사람"], ["org", "기관"], ["topic", "주제"], ["source", "자료"]]) {
+    const s = document.createElement("span"); s.innerHTML = `<b></b>${label}`; s.querySelector("b").textContent = c[k] || 0; el.append(s);
+  }
+  const s = document.createElement("span"); s.innerHTML = "<b></b>연결"; s.querySelector("b").textContent = links.length; el.append(s);
+}
+
+function renderFilters(data) {
+  const types = document.getElementById("types"), sources = document.getElementById("sources");
+  types.innerHTML = ""; sources.innerHTML = "";
+  for (const [k, label] of TYPES) {
+    if (!data.counts[k]) continue;
+    const color = k === "source" ? `conic-gradient(${css("--call")} 0 25%, ${css("--message")} 0 50%, ${css("--email")} 0 75%, ${css("--kakao")} 0)` : css("--" + k);
+    types.append(chip(label, color, data.counts[k], state.hiddenTypes, k));
+  }
+  for (const [k, n] of Object.entries(data.source_counts).sort((a, b) => b[1] - a[1])) {
+    sources.append(chip(sourceLabel(k), css("--" + k) || css("--other"), n, state.hiddenSources, k));
+  }
+}
+function chip(label, color, n, set, key) {
+  const b = document.createElement("button");
+  b.className = "chip" + (set.has(key) ? " off" : "");
+  b.innerHTML = '<span class="dot"></span><span class="l"></span><span class="n"></span>';
+  b.querySelector(".dot").style.background = color;
+  b.querySelector(".l").textContent = label;
+  b.querySelector(".n").textContent = n.toLocaleString();
+  b.onclick = () => { set.has(key) ? set.delete(key) : set.add(key); b.classList.toggle("off"); apply(); };
+  return b;
+}
+
+// 검색
+document.getElementById("q").addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase(), box = document.getElementById("results");
+  box.innerHTML = "";
+  if (!q) return;
+  const hits = state.all.nodes.filter(n => n.title.toLowerCase().includes(q))
+    .sort((a, b) => (a.type === "source") - (b.type === "source") || b.degree - a.degree).slice(0, 30);
+  for (const n of hits) {
+    const b = document.createElement("button"); b.textContent = n.title; b.onclick = () => open(n.id); box.append(b);
+  }
+});
+document.getElementById("fold").onclick = () => document.getElementById("filters").classList.toggle("unfold");
+
+// 상세 패널
+async function open(id) {
+  const n = state.byId.get(id);
+  if (n && !fg.graphData().nodes.includes(n)) {   // 걸러진 노드면 보이게 한다
+    state.hiddenTypes.delete(n.type); if (n.source) state.hiddenSources.delete(n.source);
+    state.until = Infinity; setScrub(state.times.length); renderFilters(state.data); apply();
+  }
+  state.focus = n || null; setNeighbors();
+  if (n && n.x !== undefined) { fg.centerAt(n.x, n.y, 700); fg.zoom(Math.max(fg.zoom(), 2.2), 700); }
+  const res = await fetch("/wiki/page?path=" + encodeURIComponent(id), { credentials: "same-origin" });
+  if (!res.ok) return;
+  const page = await res.json();
+  const el = document.getElementById("detail");
+  el.innerHTML = "";
+  const close = document.createElement("button"); close.className = "close"; close.textContent = "✕"; close.onclick = closeDetail;
+  const kind = document.createElement("div"); kind.className = "kind";
+  kind.innerHTML = '<span class="dot"></span><span></span>';
+  kind.querySelector(".dot").style.background = n ? colorOf(n) : css("--other");
+  kind.lastChild.textContent = n?.type === "source" ? `자료 · ${sourceLabel(n.source)}` : (TYPES.find(t => t[0] === page.type)?.[1] || page.type);
+  const md = document.createElement("div"); md.className = "md";
+  md.innerHTML = DOMPurify.sanitize(marked.parse(page.markdown));
+  // 위키 안 링크는 그래프에서 그 노드로 옮겨 간다
+  for (const a of md.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href");
+    if (/^[a-z]+:/i.test(href) || !href.split("#")[0].endsWith(".md")) { a.target = "_blank"; a.rel = "noopener"; continue; }
+    const base = page.path.includes("/") ? page.path.slice(0, page.path.lastIndexOf("/") + 1) : "";
+    const target = new URL(decodeURIComponent(href.split("#")[0]), "http://w/" + base).pathname.slice(1);
+    a.href = "#"; a.onclick = e => { e.preventDefault(); open(target); };
+  }
+  el.append(close, kind, md);
+  if (page.linked.length) {
+    const box = document.createElement("div"); box.className = "linked";
+    box.innerHTML = `<h2>이어진 페이지 ${page.linked.length}</h2>`;
+    for (const l of page.linked) {
+      const b = document.createElement("button"), ln = state.byId.get(l.id);
+      b.innerHTML = '<span class="dot" style="width:8px;height:8px;border-radius:50%;flex:none"></span><span></span>';
+      b.firstChild.style.background = ln ? colorOf(ln) : css("--other");
+      b.lastChild.textContent = l.title; b.onclick = () => open(l.id); box.append(b);
+    }
+    el.append(box);
+  }
+  el.classList.add("open"); el.scrollTop = 0;
+}
+function closeDetail() {
+  document.getElementById("detail").classList.remove("open");
+  state.focus = null; setNeighbors();
+}
+
+// 타임라인: 노드가 처음 커밋된 시각 순서로 위키가 자라는 과정을 되감는다
+const scrub = document.getElementById("scrub");
+function setScrub(i) {
+  scrub.value = i;
+  const t = state.times[i - 1];
+  state.until = i >= state.times.length ? Infinity : (t ?? -Infinity);
+  const when = document.getElementById("when");
+  const shown = state.all.nodes.filter(n => !n.added_at || Date.parse(n.added_at) <= state.until).length;
+  const label = i >= state.times.length ? "지금" : t ? new Date(t).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "시작";
+  const commit = state.commits.find(c => Date.parse(c.at) === t);
+  when.innerHTML = "<b></b><span></span>";
+  when.firstChild.textContent = `${label} · 페이지 ${shown.toLocaleString()}`;
+  when.lastChild.textContent = commit ? commit.subject : "";
+}
+scrub.addEventListener("input", () => { stop(); setScrub(+scrub.value); apply(); });
+
+let timer = null;
+const PLAY_SVG = '<svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z"/></svg>';
+const PAUSE_SVG = '<svg viewBox="0 0 16 16"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>';
+function stop() { clearInterval(timer); timer = null; state.playing = false; document.getElementById("play").innerHTML = PLAY_SVG; }
+document.getElementById("play").onclick = () => {
+  if (state.playing) return stop();
+  if (!state.times.length) return;
+  state.playing = true; document.getElementById("play").innerHTML = PAUSE_SVG;
+  let i = +scrub.value >= state.times.length ? 0 : +scrub.value;
+  fg.graphData({ nodes: [], links: [] });
+  for (const n of state.all.nodes) { delete n.x; delete n.y; delete n.vx; delete n.vy; }
+  // 커밋이 많아도 20초 안에 끝나게 간격을 정한다
+  const step = Math.max(80, Math.min(900, 20000 / state.times.length));
+  setScrub(i); apply();
+  timer = setInterval(() => {
+    i += 1; setScrub(i); apply();
+    if (i >= state.times.length) { stop(); setTimeout(() => fg.zoomToFit(900, 80), 600); }
+  }, step);
+};
+
+async function load(first) {
+  const res = await fetch("/wiki/graph", { credentials: "same-origin" });
+  if (!res.ok) { document.getElementById("empty").textContent = "그래프를 불러오지 못했습니다 (" + res.status + ")"; document.getElementById("empty").style.display = "grid"; return; }
+  const data = await res.json();
+  state.data = data;
+  if (first && (data.counts.source || 0) > MANY_SOURCES) state.hiddenTypes.add("source");
+  const fresh = [];
+  for (const n of data.nodes) {
+    const old = state.byId.get(n.id);
+    if (old) Object.assign(old, n); else { state.byId.set(n.id, n); if (!first) fresh.push(n.id); }
+  }
+  const ids = new Set(data.nodes.map(n => n.id));
+  for (const id of [...state.byId.keys()]) if (!ids.has(id)) state.byId.delete(id);
+  state.all = { nodes: data.nodes.map(n => state.byId.get(n.id)),
+                links: data.links.map(l => ({ sid: l.source, tid: l.target, weight: l.weight, added_at: l.added_at })) };
+  state.commits = data.commits;
+  state.times = [...new Set(data.nodes.map(n => n.added_at && Date.parse(n.added_at)).filter(Boolean))].sort((a, b) => a - b);
+  scrub.max = state.times.length;
+  document.getElementById("empty").style.display = data.nodes.length ? "none" : "grid";
+  renderFilters(data);
+  if (state.playing) return;
+  if (first || state.until === Infinity) setScrub(state.times.length);
+  apply();
+  for (const id of fresh) state.born.set(id, performance.now());
+  if (first) setTimeout(() => fg.zoomToFit(800, 80), 1200);
+}
+// 새 자료가 위키에 들어오면 노드가 반짝이며 나타난다
+load(true).then(() => setInterval(() => load(false), POLL_MS));
+addEventListener("resize", () => fg.width(innerWidth).height(innerHeight));
+</script>
+</body>
+</html>

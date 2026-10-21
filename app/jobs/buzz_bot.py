@@ -23,7 +23,8 @@ import time
 
 from app.core.config import get_settings
 from app.db.session import init_db
-from app.repositories import buzz_state, calendar_items
+from app.repositories import agent_turns, buzz_state, calendar_items
+from app.repositories.events import now
 from app.services import agent, bot, buzz, nostr
 
 HISTORY_MESSAGES = 10
@@ -194,6 +195,7 @@ def agent_reply(channel: str, msg: dict, text: str, is_owner: bool, reply_to: st
         buzz.react(msg["id"], "👀")   # 답을 만드는 중이라는 표시
     except buzz.BuzzError:
         logger.warning("could not react to %s", msg.get("id"))
+    started, ok = now(), True
     try:
         names = buzz.user_names([msg["pubkey"]])
         history = channel_history(channel, msg) if with_history else []
@@ -201,7 +203,8 @@ def agent_reply(channel: str, msg: dict, text: str, is_owner: bool, reply_to: st
                              is_owner, history)
     except Exception as e:
         logger.exception("agent reply failed")
-        result = f"에이전트 오류: {str(e)[:300]}"
+        result, ok = f"에이전트 오류: {str(e)[:300]}", False
+    agent_turns.record(channel, is_owner, text, result, ok, started)   # 웹 흐름 화면에 보여 준다
     buzz.send(channel, result, reply_to)
 
 

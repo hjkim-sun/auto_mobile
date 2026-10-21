@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Seoul"
     # 설정하면 수신 API 가 "Authorization: Bearer <토큰>" 을 요구한다.
     ingest_token: SecretStr | None = None
+    # 웹 화면(/web/wiki, /web/flow)과 그 API(/wiki/*, /flow/*)의 토큰. 위키에 개인 정보가 있으므로 비우면 화면을 닫는다(404).
+    # 브라우저에서 /web/flow?token=<토큰> 으로 한 번 열면 쿠키에 남는다.
+    web_token: SecretStr | None = None
 
     typesafe_api_key: SecretStr = SecretStr("")
     typesafe_api_base: str = "https://api.typesafe.ai"

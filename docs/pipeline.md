@@ -75,6 +75,7 @@ sequenceDiagram
     B->>L: 에이전트 스레드에서 claude -p --resume (채널마다 세션 하나)<br/>+ 채널 최근 대화 10건, 규칙 prompts/agent.md
     L->>S: MCP 도구 (app/jobs/agent_mcp.py)로 이벤트 조회,<br/>주인이 정했으면 캘린더 등록/안함
     L-->>B: 답 (위키와 #번호 근거)
+    B->>S: agent_turns 에 질문과 답 기록 (웹 흐름 화면용)
     B->>U: DM 답장, 채널이면 그 메시지의 스레드로
 
     Note over S,L: 4. LLM 위키: 위키 빌더 (10분마다)
@@ -99,6 +100,12 @@ sequenceDiagram
     C->>A: GET /v1/verdicts/messages
     A->>S: 판별 결과 조회
     A-->>C: {items, next_before_id}
+
+    Note over A,S: 6. 웹 화면 (WEB_TOKEN 쿠키)
+    U->>A: GET /web/flow, /web/wiki
+    A->>S: /flow/stats: events, wiki_ingests, notifications, calendar_items, agent_turns 집계 (5초마다)
+    A->>S: /wiki/graph: data/wiki 페이지와 링크, git 이력의 처음 커밋 시각 (30초마다)
+    A-->>U: 흐름 애니메이션, 위키 그래프
 ```
 
 | status | 뜻 |
