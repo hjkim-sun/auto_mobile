@@ -8,7 +8,7 @@ from app.core.config import get_settings
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     id           INTEGER PRIMARY KEY,
-    source       TEXT NOT NULL,            -- call | message | email
+    source       TEXT NOT NULL,            -- call | message | kakao | email
     dedup_key    TEXT NOT NULL UNIQUE,
     payload      TEXT NOT NULL,            -- JSON 메타데이터
     raw_path     TEXT,                     -- data_dir 기준 원본 경로
