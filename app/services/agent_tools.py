@@ -12,7 +12,7 @@ from app.db.session import connect
 from app.repositories import calendar_items, events
 from app.services import bot
 
-SOURCES = {"message", "email", "call"}
+SOURCES = {"message", "kakao", "email", "call"}
 STATUSES = {"transcribing", "pending", "processing", "kept", "discarded", "failed"}
 
 
@@ -22,7 +22,7 @@ class ToolError(ValueError):
 
 def search_events(query: str | None = None, source: str | None = None, status: str | None = "kept",
                   days: int | None = None, limit: int = 20) -> str:
-    """이벤트 목록 (최신순). query 는 문자·메일 원문(payload)에서 찾는다. 통화 전사는 get_event 나 위키로 본다."""
+    """이벤트 목록 (최신순). query 는 문자·카톡·메일 원문(payload)에서 찾는다. 통화 전사는 get_event 나 위키로 본다."""
     sql, args = "SELECT * FROM events WHERE 1=1", []
     if source:
         if source not in SOURCES:
@@ -76,8 +76,8 @@ def status_counts() -> str:
 
 TOOLS = {
     "search_events": (search_events, {
-        "description": "문자·메일·통화 이벤트 목록을 최신순으로 본다. 기본은 남긴 것(kept)만."
-                       " query 는 문자·메일 원문에서 찾는 단어. 통화 내용은 get_event 로 본다.",
+        "description": "문자·카톡·메일·통화 이벤트 목록을 최신순으로 본다. 기본은 남긴 것(kept)만."
+                       " query 는 문자·카톡·메일 원문에서 찾는 단어. 통화 내용은 get_event 로 본다.",
         "properties": {
             "query": {"type": "string"},
             "source": {"enum": sorted(SOURCES)},

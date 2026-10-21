@@ -1,6 +1,6 @@
 # 카카오톡 메시지 전송
 
-상태: 조사 완료(2026-10-20), 착수 대기
+상태: 진행 중(2026-10-21). 서버 `POST /v1/ingest/kakao`, 폰 `KakaoTalk forward` 플로우
 
 ## 조사 결과 (맥에서 adb로 확인)
 
@@ -14,6 +14,16 @@
   - `android.isGroupConversation`: 단톡 여부
   - `android.messages[]`: `sender`, `text`(링크까지 전체), `time`(epoch ms), `extras.chatLogId`(메시지 고유 id)
   - `chatLogId`가 있어 서버에서 중복을 거를 수 있다.
+
+## Automate 로 받아 보니 (2026-10-21)
+
+- `Notification posted?` 의 Extras 에 `android.messages` 가 없다(Bundle 배열은 넘기지 않는다). 마지막 메시지의 `chatLogId` 가 extras 최상위에 온다. 알림 갱신 한 번이 메시지 하나다.
+- `android.title` 은 방 이름이 아니라 마지막 메시지를 보낸 사람이다. ticker 는 `보낸사람 : 본문`. 단톡방 이름은 알림 어디에도 없다(shortcut 라벨에만 있다).
+- `isGroupConversation` 은 1:1 방도 true 다. 알림 id 는 모든 방이 2 이고 tag(방 id)는 Automate 가 주지 않는다.
+- 그래서 오픈채팅은 채널로 거른다: 카톡에서 오픈채팅방 알림을 끄고 `new_message_v6` 만 받는다.
+- Automate 숫자는 double 이라 19자리 chatLogId 의 끝자리가 뭉개진다(512 단위). 메시지마다 id 가 크게 벌어져 중복 판정에는 문제없다.
+- `when` 은 초 단위(소수)다.
+- 방마다 알림을 묶는 요약 알림(GROUP_SUMMARY)도 함께 올라온다. 제목과 본문이 비어 있어 서버가 무시한다.
 
 ## 주의
 

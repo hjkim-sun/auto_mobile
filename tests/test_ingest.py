@@ -149,3 +149,55 @@ def test_token_is_required_when_configured(client, monkeypatch):
 def test_health_counts_events(client):
     client.post("/v1/ingest/messages", json=SMS)
     assert client.get("/v1/health").json() == {"status": "ok", "events": {"pending": 1}}
+
+
+
+def kakao(sender="홍길동", text="내일 3시에 봬요", chat_log_id=3900000000000000000, channel="new_message_v6"):
+    """Automate Notification posted? 출력을 그대로 jsonEncode 한 모양 (값은 가짜). title 은 보낸 사람이다."""
+    return {"title": sender, "message": text, "ticker": f"{sender} : {text}", "when": 1792592690.867,
+            "channel": channel,
+            "extras": {"android.title": sender, "android.text": text, "android.isGroupConversation": True,
+                       "android.hiddenConversationTitle": None, "android.selfDisplayName": "나",
+                       "threadId": 0, "chatLogId": chat_log_id}}
+
+
+def test_kakao_message_is_stored_and_deduplicated(client):
+    res = client.post("/v1/ingest/kakao", json=kakao())
+    assert res.status_code == 201
+    assert res.json() == {"event_id": 1, "duplicate": False, "ignored": False}
+
+    stored = json.loads((get_settings().raw_dir / "kakao/20261021/3900000000000000000.json").read_text())
+    assert stored["sender"] == "홍길동" and stored["room"] is None
+    assert stored["date_text"] == "2026-10-21 23:24:50"
+    assert stored["context"] == []
+
+    again = client.post("/v1/ingest/kakao", json=kakao())
+    assert again.status_code == 200
+    assert again.json() == {"event_id": 1, "duplicate": True, "ignored": False}
+
+
+def test_kakao_context_is_previous_messages_from_same_sender(client):
+    client.post("/v1/ingest/kakao", json=kakao("홍길동", "몇 시에 와?", 100))
+    client.post("/v1/ingest/kakao", json=kakao("김철수", "안녕", 200))
+    client.post("/v1/ingest/kakao", json=kakao("홍길동", "7시", 300))
+    stored = json.loads((get_settings().raw_dir / "kakao/20261021/300.json").read_text())
+    assert stored["context"] == [{"sender": "홍길동", "text": "몇 시에 와?"}]
+
+
+def test_kakao_without_chat_log_id_is_deduplicated_by_content(client):
+    note = kakao(chat_log_id=None)
+    assert client.post("/v1/ingest/kakao", json=note).status_code == 201
+    assert client.post("/v1/ingest/kakao", json=note).status_code == 200
+
+
+def test_kakao_summary_and_muted_room_notifications_are_ignored(client):
+    summary = {"title": None, "message": None, "when": 1792592690.32, "channel": "new_message_v6",
+               "extras": {"android.title": None, "android.text": None}}
+    res = client.post("/v1/ingest/kakao", json=summary)
+    assert res.status_code == 200 and res.json()["ignored"] is True
+
+    # 알림을 끈 방(오픈채팅 등)은 quiet_new_message 채널로 온다
+    res = client.post("/v1/ingest/kakao", json=kakao(channel="quiet_new_message"))
+    assert res.status_code == 200
+    assert res.json() == {"event_id": None, "duplicate": False, "ignored": True}
+    assert raw_files("kakao") == []

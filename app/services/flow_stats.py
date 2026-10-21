@@ -40,6 +40,8 @@ def _label(row: sqlite3.Row) -> str:
     payload = json.loads(row["payload"])
     if row["source"] == "call":
         return payload.get("name") or payload.get("number") or (payload.get("filename") or "통화").rsplit(".", 1)[0]
+    if row["source"] == "kakao":
+        return payload.get("room") or payload.get("sender") or "카톡"
     if row["source"] == "email":
         return payload.get("subject") or payload.get("account") or "메일"
     return payload.get("from") or payload.get("sender") or row["source"]

@@ -18,7 +18,7 @@ from app.db.session import connect
 from app.repositories import calendar_items
 from app.services.render import call_header, render
 
-LABELS = {"message": "문자", "email": "메일", "call": "통화"}
+LABELS = {"message": "문자", "kakao": "카톡", "email": "메일", "call": "통화"}
 WRITE_TOOLS = "Read,Write,Edit,Glob,Grep"
 READ_TOOLS = "Read,Glob,Grep"
 INDEX = "# 위키 목록\n\n아직 페이지가 없다.\n"

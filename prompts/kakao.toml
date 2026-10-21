@@ -1,0 +1,15 @@
+# Jev 판별 프롬프트: 카카오톡 (events.source = kakao)
+# 형식은 app/services/prompts.py 참고. 판별할 때마다 읽으므로 고친 뒤 재시작하지 않아도 된다.
+
+# questions.<keep_question> 의 <keep_choice> 확률이 threshold 이상이면 kept, 아니면 discarded
+keep_question = "relevance"
+keep_choice = "useful"
+# threshold = 0.3   # 생략하면 .env 의 JEV_KEEP_THRESHOLD
+
+[questions.relevance]
+type = "choice"
+instructions = "개인비서가 이 내용을 기록하거나 사용자에게 알릴 가치가 있는가?"
+
+[questions.relevance.criteria]
+useful = "약속·일정·모임, 가족이나 지인과의 개인적 대화, 업무 연락, 결제일과 금액이 정해진 카드 대금·청구 안내, 예약 확인, 배송·병원·관공서 등 사용자가 기억하거나 대응해야 할 내용"
+noise = "광고·홍보·스팸, 인증번호, 뉴스레터, 단순 시스템 알림, 카드 승인·취소 문자처럼 결제한 금액과 가맹점만 알리는 내용 등 버려도 되는 내용"
