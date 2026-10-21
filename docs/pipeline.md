@@ -26,7 +26,7 @@ sequenceDiagram
     A->>S: 원본 파일 저장, events 행 추가<br/>(status=pending, 통화는 status=transcribing)
     A-->>C: 201 {event_id}<br/>(이미 받은 데이터면 저장 없이 200. 통화는 비어 있던 통화 정보만 채움)
 
-    opt MMS 첨부
+    opt MMS 첨부 (2026-10-21부터 폰 플로우가 보내지 않음)
         C->>A: PUT /v1/ingest/messages/mms-{id}/attachments/{part}
         A->>S: 첨부 저장, 판별 시점(available_at)을 30초 뒤로 미룸
     end

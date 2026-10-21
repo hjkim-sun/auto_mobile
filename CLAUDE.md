@@ -34,10 +34,11 @@ API, 저장 경로, 실행 방법은 README.md에 정리돼 있다.
 |---|---|---|
 | SMS MMS forward | 10 (SMS 본문) | `POST /v1/ingest/messages` |
 | SMS MMS forward | 16 (MMS 본문) | `POST /v1/ingest/messages` |
-| SMS MMS forward | 19 (MMS 첨부) | `PUT /v1/ingest/messages/mms-{id}/attachments/{part}?filename=` |
-| 통화녹음전송 | 3 | `POST /v1/ingest/calls?filename=` |
+| 통화녹음전송 | 3 | `POST /v1/ingest/calls?filename=&direction=&number=&name=&call_date=` |
 
-4개 블록 모두 Request headers에 `{"Authorization": "Bearer <INGEST_TOKEN>"}`이 들어 있다.
+MMS 첨부 전송(`PUT .../attachments/...`)은 2026-10-21 플로우에서 뺐다. 서버 엔드포인트는 남아 있다.
+
+3개 블록 모두 Request headers에 `{"Authorization": "Bearer <INGEST_TOKEN>"}`이 들어 있다.
 
 ### 폰 조작은 VPS의 Claude가 할 수 없다
 
@@ -55,6 +56,12 @@ VPS의 Claude가 지켜야 할 것:
 - `./goto.sh <블록번호>`로 플로우차트에서 블록으로 이동한다. 이동한 블록은 대개 (540, 796) 근처에 오지만, 차트 끝 블록은 가운데로 오지 않으므로 캡처해서 위치를 확인한다.
 - 실행 중인 플로우를 편집하면 플로우가 멈춘다("Stopped by user"). 편집을 마치면 플로우 화면에서 START로 다시 시작하고, 목록에서 `running fibers` 아이콘으로 확인한다.
 - 편집기 밖에서 `goto.sh`를 실행하면 플로우 메뉴(Duplicate/Delete)가 열린다. Delete를 누르지 않게 주의한다.
+- 블록 편집 화면에서 `BACK`을 연달아 보내면 편집기와 플로우 화면까지 빠져나간다. 블록을 닫을 때는 `./ui.py tap 'Navigate up'`을 한 번만 쓴다.
+- 연결선을 끌 때 시작점이나 끝점이 화면 가장자리(x<100, x>980)에 있으면 캔버스가 스크롤돼 엉뚱한 곳에 떨어지고, 이미 있던 연결이 끊긴다("Deleted 1 connections"). 블록을 먼저 화면 가운데로 옮긴 뒤 끈다. 끊겼으면 툴바 Undo로 되돌린다.
+- 블록 삭제: 블록을 길게 눌러 선택하고, 다른 블록을 탭해 선택에 더한 뒤 ⋮ → Delete.
+- 폼 맨 아래 행(y>2200)은 내비게이션 바와 겹친다. 위로 스크롤한 뒤 탭한다.
+- 플로우 화면에서 `./ui.py tap 'STOP (1)'`처럼 STOP 버튼 글자를 탭하면 플로우가 멈춘다. 실행 여부는 `./ui.sh | grep STOP`으로만 본다.
+- Content query의 Where 절에 SQL 함수(`julianday` 등)를 쓰면 통화 기록 같은 provider가 `Invalid token`으로 거부한다. adb shell에서는 통과하므로 adb 시험만 믿지 않는다.
 
 ## git 원칙
 작업 후에는 항상 commit 을 수행한다. 
