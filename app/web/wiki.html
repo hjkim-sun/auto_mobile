@@ -3,33 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>위키 그래프</title>
+<title>위키 은하</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/force-graph@1.51.5/dist/force-graph.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@18.0.13/lib/marked.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.15/dist/purify.min.js"></script>
 <style>
 :root {
   color-scheme: dark;
-  --bg: #0b0c10;
-  --surface: #15161b;
-  --surface-2: #1d1f26;
-  --line: #2a2c35;
+  --bg: #02030a;
+  --surface: #0d1020;
+  --surface-2: #161a2e;
+  --line: #252a45;
   --text: #f0efec;
-  --text-2: #c3c2b7;
-  --muted: #8a897f;
-  --accent: #3987e5;
-  /* 노드 색. 자료(source)는 들어온 채널, 나머지는 페이지 종류 */
-  --call: #3987e5;
-  --message: #d95926;
-  --email: #199e70;
-  --kakao: #c98500;
-  --other: #8a897f;
-  --person: #9085e9;
-  --org: #2fa84f;
-  --topic: #d55181;
-  --schedule: #e66767;
+  --text-2: #c3c6d6;
+  --muted: #858aa3;
+  --accent: #4da3ff;
+  /* 색은 자료가 들어온 채널만 나타낸다 */
+  --call: #4da3ff;
+  --message: #ff7a3d;
+  --email: #2fd39a;
+  --kakao: #ffcc33;
+  --other: #b6bdd6;
+  --neutral: #dfe6ff;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -38,30 +34,39 @@ button, input { font: inherit; color: inherit; }
 a { color: var(--accent); }
 
 header { position: fixed; inset: 0 0 auto 0; height: 56px; display: flex; align-items: center; gap: 20px;
-  padding: 0 20px; z-index: 5; background: linear-gradient(var(--bg), rgba(11,12,16,0)); }
+  padding: 0 20px; z-index: 5; background: linear-gradient(rgba(2,3,10,.85), rgba(2,3,10,0)); pointer-events: none; }
+header > * { pointer-events: auto; }
 .brand { font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
 .brand span { color: var(--muted); font-weight: 400; margin-left: 6px; }
-nav { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+nav { display: flex; gap: 4px; background: rgba(13,16,32,.8); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
 nav a { white-space: nowrap; padding: 5px 12px; border-radius: 7px; color: var(--text-2); text-decoration: none; font-size: 14px; }
 nav a.on { background: var(--surface-2); color: var(--text); }
 .stats { margin-left: auto; display: flex; gap: 18px; font-size: 13px; color: var(--muted); }
 .stats b { color: var(--text); font-size: 18px; font-variant-numeric: tabular-nums; margin-right: 4px; }
 
 #graph { position: fixed; inset: 0; }
+.label { color: var(--text); font-size: 12px; font-weight: 500; white-space: nowrap; pointer-events: none;
+  text-shadow: 0 0 4px #000, 0 0 10px #000; transition: opacity .3s; letter-spacing: .01em; }
+.label.big { font-size: 14px; font-weight: 700; }
+.float-tooltip-kap { background: rgba(13,16,32,.92) !important; border: 1px solid var(--line); border-radius: 8px !important;
+  padding: 8px 10px !important; font: 12px "Noto Sans KR", sans-serif !important; color: var(--text-2) !important; max-width: 280px; }
+.float-tooltip-kap b { color: var(--text); display: block; margin-bottom: 2px; font-size: 13px; }
 
-.panel { position: fixed; z-index: 4; background: rgba(21,22,27,.88); backdrop-filter: blur(10px);
+.panel { position: fixed; z-index: 4; background: rgba(13,16,32,.78); backdrop-filter: blur(12px);
   border: 1px solid var(--line); border-radius: 14px; }
-#filters { top: 68px; left: 16px; width: 228px; padding: 14px; font-size: 13px; }
+#filters { top: 68px; left: 16px; width: 232px; padding: 14px; font-size: 13px; }
 #filters .top { display: flex; gap: 6px; }
 #filters .fold { display: none; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 0 10px; cursor: pointer; }
 #filters input[type=search] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
-  background: var(--bg); outline: none; }
+  background: rgba(2,3,10,.7); outline: none; }
 #filters input[type=search]:focus { border-color: var(--accent); }
 #filters h3 { margin: 14px 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .08em; }
+#filters .note { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 10px 2px 0; }
 .chip { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; border: 0; background: none;
   border-radius: 6px; cursor: pointer; text-align: left; color: var(--text-2); }
 .chip:hover { background: var(--surface-2); }
-.chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 8px currentColor; }
+.chip .dot.plain { background: none !important; box-shadow: inset 0 0 0 1.5px var(--muted); }
 .chip .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chip.off { opacity: .35; }
 .chip.off .dot { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--muted); }
@@ -92,14 +97,14 @@ nav a.on { background: var(--surface-2); color: var(--text); }
 
 #timeline { left: 16px; right: 16px; bottom: 16px; height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 16px; }
 #play { width: 38px; height: 38px; flex: none; border-radius: 50%; border: 0; background: var(--accent); cursor: pointer;
-  display: grid; place-items: center; }
+  display: grid; place-items: center; box-shadow: 0 0 18px rgba(77,163,255,.5); }
 #play svg { width: 16px; height: 16px; fill: #fff; }
-#scrub { flex: 1; accent-color: var(--accent); }
+#spin { flex: none; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 6px 10px;
+  cursor: pointer; font-size: 12px; color: var(--text-2); }
+#spin.on { border-color: var(--accent); color: var(--text); }
+#scrub { flex: 1; min-width: 0; accent-color: var(--accent); }
 #when { width: 260px; flex: none; font-size: 13px; color: var(--text-2); line-height: 1.35; }
 #when b { display: block; color: var(--text); font-variant-numeric: tabular-nums; }
-#tip { position: fixed; z-index: 6; pointer-events: none; padding: 8px 10px; border-radius: 8px; background: var(--surface-2);
-  border: 1px solid var(--line); font-size: 12px; max-width: 280px; display: none; color: var(--text-2); }
-#tip b { color: var(--text); display: block; margin-bottom: 2px; font-size: 13px; }
 #empty { position: fixed; inset: 0; display: none; place-items: center; color: var(--muted); }
 
 @media (max-width: 720px) {
@@ -107,7 +112,8 @@ nav a.on { background: var(--surface-2); color: var(--text); }
   #filters { width: calc(100vw - 32px); max-height: 45vh; overflow: auto; }
   #filters .fold { display: block; }
   #filters:not(.unfold) .body { display: none; }
-  #when { width: 120px; font-size: 11px; }
+  #when { width: 110px; font-size: 11px; }
+  #spin { display: none; }
   #detail { top: auto; height: 60vh; }
 }
 </style>
@@ -125,8 +131,9 @@ nav a.on { background: var(--surface-2); color: var(--text); }
   <div class="top"><input type="search" id="q" placeholder="사람, 기관, 주제 찾기" autocomplete="off"><button class="fold" id="fold">필터</button></div>
   <div id="results"></div>
   <div class="body">
-    <h3>페이지</h3><div id="types"></div>
     <h3>자료가 들어온 곳</h3><div id="sources"></div>
+    <h3>페이지</h3><div id="types"></div>
+    <p class="note">작은 별은 자료 한 건, 큰 행성은 사람·기관·주제다. 행성 색은 가장 많이 이어진 채널을 따른다.</p>
   </div>
 </aside>
 
@@ -134,135 +141,268 @@ nav a.on { background: var(--surface-2); color: var(--text); }
 
 <div class="panel" id="timeline">
   <button id="play" aria-label="성장 과정 재생"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z"/></svg></button>
+  <button id="spin" class="on" aria-pressed="true">회전</button>
   <input type="range" id="scrub" min="0" max="0" value="0" aria-label="시점">
   <div id="when"></div>
 </div>
-<div id="tip"></div>
 
-<script>
+<script type="module">
+// three 는 3d-force-graph 가 쓰는 것과 같은 판(jsdelivr +esm 이 고른 0.186.1)을 불러 한 인스턴스로 쓴다
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.186.1/+esm";
+import { UnrealBloomPass } from "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/postprocessing/UnrealBloomPass.js/+esm";
+import { CSS2DRenderer, CSS2DObject } from "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/renderers/CSS2DRenderer.js/+esm";
+import ForceGraph3D from "https://cdn.jsdelivr.net/npm/3d-force-graph@1.80.1/+esm";
+
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const TYPES = [
-  ["person", "사람"], ["org", "기관"], ["topic", "주제"], ["schedule", "일정"], ["source", "자료"],
-];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const TYPES = [["person", "사람"], ["org", "기관"], ["topic", "주제"], ["schedule", "일정"], ["source", "자료"]];
+const typeLabel = t => TYPES.find(x => x[0] === t)?.[1] || t;
 const SOURCES = { call: "통화", message: "문자", email: "메일", kakao: "카카오톡" };
 const sourceLabel = s => SOURCES[s] || s || "알 수 없음";
-const colorOf = n => n.type === "source" ? (css("--" + n.source) || css("--other"))
-  : (css("--" + n.type) || css("--other"));
+const channelColor = c => (c && css("--" + c)) || css("--other");
+// 자료는 들어온 채널 색, 나머지 페이지는 이어진 자료 중 가장 많은 채널 색. 이어진 자료가 없으면 흰 별
+const colorOf = n => n.type === "source" ? channelColor(n.source) : (n.channel ? channelColor(n.channel) : css("--neutral"));
 // 자료 노드가 많으면(카카오톡을 넣으면 수천 개) 기본으로 숨기고 사람·기관·주제만 그린다
 const MANY_SOURCES = 1500;
+const LABELS = () => innerWidth < 720 ? 15 : 60;   // 이름을 늘 띄워 둘 행성 수 (연결이 많은 순)
 const POLL_MS = 30000;
 
 const state = {
   all: { nodes: [], links: [] }, byId: new Map(), times: [], commits: [],
   hiddenTypes: new Set(), hiddenSources: new Set(), until: Infinity,
-  hover: null, focus: null, neighbors: new Set(), born: new Map(), playing: false,
+  hover: null, focus: null, neighbors: new Set(), labeled: new Set(), born: new Map(), playing: false, beltR: 260,
 };
 
-const fg = ForceGraph()(document.getElementById("graph"))
-  .backgroundColor(css("--bg"))
-  .autoPauseRedraw(false)   // 멈춘 뒤에도 반짝이는 고리와 선 위의 점을 그린다
+// 빛 번짐 텍스처: 가운데가 하얗고 바깥으로 사라지는 원
+function glowTexture(stops) {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d"), grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  for (const [at, a] of stops) grad.addColorStop(at, `rgba(255,255,255,${a})`);
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const GLOW = glowTexture([[0, 1], [0.18, 0.75], [0.45, 0.18], [1, 0]]);
+const HAZE = glowTexture([[0, 0.5], [0.4, 0.15], [1, 0]]);
+const SPHERE = new THREE.SphereGeometry(1, 28, 18);
+const RING = new THREE.RingGeometry(1.7, 2.25, 72);
+const WHITE = new THREE.Color("#ffffff");
+
+const fg = ForceGraph3D({ controlType: "orbit", extraRenderers: [new CSS2DRenderer()] })(document.getElementById("graph"))
+  // 블룸 후처리를 거치면 배경색이 감마 보정을 한 번 더 받아 밝아지므로 검정으로 두고 별과 성운으로 깊이를 낸다
+  .backgroundColor("#000000")
+  .showNavInfo(false)
   .nodeId("id")
-  .nodeVal(n => radius(n) ** 2)
-  .nodeCanvasObject(drawNode)
-  .nodePointerAreaPaint((n, color, ctx) => { ctx.fillStyle = color; ctx.beginPath();
-    ctx.arc(n.x, n.y, radius(n) + 3, 0, 2 * Math.PI); ctx.fill(); })
-  .linkColor(l => lit(l) ? "rgba(240,239,236,.55)" : "rgba(195,194,183,.12)")
-  .linkWidth(l => lit(l) ? 1.6 : 0.6)
-  .linkDirectionalParticles(l => lit(l) ? 2 : 0)
-  .linkDirectionalParticleWidth(2.2)
-  .linkDirectionalParticleColor(() => css("--text"))
-  .d3VelocityDecay(0.3)
-  .cooldownTime(8000)
-  .onNodeHover(n => { state.hover = n || null; setNeighbors(); document.body.style.cursor = n ? "pointer" : ""; tip(n); })
+  .nodeThreeObject(nodeObject)
+  .nodeLabel(n => `<b>${esc(n.title)}</b>${esc(n.type === "source" ? "자료 · " + sourceLabel(n.source) : typeLabel(n.type))} · 연결 ${n.degree}`
+    + (n.summary ? `<div style="margin-top:4px">${esc(n.summary)}</div>` : ""))
+  .linkColor(l => lit(l) ? "#ffffff" : linkTint(l))
+  .linkOpacity(0.28)
+  .linkWidth(l => lit(l) ? 0.9 : 0)
+  .linkDirectionalParticles(l => lit(l) ? 3 : 0)
+  .linkDirectionalParticleWidth(1.8)
+  .linkDirectionalParticleSpeed(0.012)
+  .linkDirectionalParticleColor(() => "#ffffff")
+  // 공전을 계속 그리도록 시뮬레이션을 멈추지 않는다. 힘은 점점 약해지고 공전만 남는다
+  .d3AlphaDecay(0.015).d3AlphaMin(0).d3VelocityDecay(0.4)
+  .cooldownTicks(Infinity).cooldownTime(Infinity)
+  .onNodeHover(n => { state.hover = n || null; highlight(); document.body.style.cursor = n ? "pointer" : ""; })
   .onNodeClick(n => open(n.id))
   .onBackgroundClick(() => closeDetail());
-fg.d3Force("charge").strength(n => n.type === "source" ? -25 : -90);
-fg.d3Force("gravity", (() => {
-  let nodes = [];
-  const force = alpha => { for (const n of nodes) if (Number.isFinite(n.x)) { n.vx -= n.x * 0.04 * alpha; n.vy -= n.y * 0.04 * alpha; } };
-  force.initialize = ns => { nodes = ns; };
-  return force;
-})());
-fg.d3Force("link").distance(l => (end(l.source).type === "source" || end(l.target).type === "source") ? 28 : 60);
+fg.renderer().setPixelRatio(Math.min(devicePixelRatio, 2));
 
-function end(x) { return typeof x === "object" ? x : state.byId.get(x); }
-function radius(n) {
-  const base = n.type === "source" ? 2.2 : n.type === "schedule" ? 7 : 4.5;
-  return base + Math.sqrt(n.degree || 0) * (n.type === "source" ? 0.6 : 1.6);
+// 힘: 행성끼리 밀어내고, 은하처럼 납작한 원반으로 모은다. 자료(작은 별)는 자기 행성 둘레를 돈다
+fg.d3Force("center", null);
+fg.d3Force("charge").strength(n => n.type === "source" ? -12 : -140);
+fg.d3Force("link").distance(l => (end(l.source).type === "source" || end(l.target).type === "source") ? 22 : 80)
+  .strength(l => (end(l.source).type === "source" || end(l.target).type === "source") ? 0.6 : 0.25);
+fg.d3Force("galaxy", custom(ns => alpha => {
+  for (const n of ns) if (!n.__orbit && Number.isFinite(n.x)) {
+    n.vx -= n.x * 0.012 * alpha; n.vz -= n.z * 0.012 * alpha; n.vy -= n.y * 0.09 * alpha;
+  }
+}));
+fg.d3Force("orbit", custom(ns => () => {
+  const t = performance.now() / 1000;
+  for (const n of ns) {
+    const o = n.__orbit;
+    if (!o) continue;
+    const p = o.parent, cx = p ? p.x : 0, cy = p ? p.y : 0, cz = p ? p.z : 0;
+    if (!Number.isFinite(cx)) continue;
+    const r = p ? o.r : state.beltR + o.r, a = o.phase + o.speed * t;
+    const tx = cx + r * (Math.cos(a) * o.u.x + Math.sin(a) * o.v.x);
+    const ty = cy + r * (Math.cos(a) * o.u.y + Math.sin(a) * o.v.y) + (p ? 0 : o.dy);
+    const tz = cz + r * (Math.cos(a) * o.u.z + Math.sin(a) * o.v.z);
+    if (!Number.isFinite(n.x)) { n.x = tx; n.y = ty; n.z = tz; }
+    n.vx = (tx - n.x) * 0.4; n.vy = (ty - n.y) * 0.4; n.vz = (tz - n.z) * 0.4;
+  }
+}));
+function custom(make) {
+  let nodes = [], tick = () => {};
+  const force = alpha => tick(alpha);
+  force.initialize = ns => { nodes = ns; tick = make(nodes); };
+  return force;
 }
+function end(x) { return typeof x === "object" ? x : state.byId.get(x); }
+
+// 자료마다 공전 궤도를 정한다. 행성 하나에만 이어진 자료는 그 행성을, 아무 데도 안 이어진 자료는 은하 바깥 소행성대를 돈다
+function basis(maxTilt) {
+  const a = Math.random() * maxTilt, b = Math.random() * Math.PI * 2;
+  const normal = new THREE.Vector3(Math.sin(a) * Math.cos(b), Math.cos(a), Math.sin(a) * Math.sin(b));
+  const u = new THREE.Vector3().crossVectors(normal, new THREE.Vector3(1, 0, 0.3)).normalize();
+  return { u, v: new THREE.Vector3().crossVectors(normal, u).normalize() };
+}
+function assignOrbits(nodes, links) {
+  const nb = new Map(nodes.map(n => [n.id, []]));
+  for (const l of links) { nb.get(l.sid)?.push(state.byId.get(l.tid)); nb.get(l.tid)?.push(state.byId.get(l.sid)); }
+  for (const n of nodes) {
+    if (n.type !== "source") { n.__orbit = null; continue; }
+    const around = nb.get(n.id), planets = around.filter(x => x.type !== "source");
+    const parent = planets.length === 1 ? planets[0] : around.length === 0 ? null : undefined;
+    if (parent === undefined) { n.__orbit = null; continue; }   // 여러 행성을 잇는 자료는 힘에 맡긴다
+    if (n.__orbit && n.__orbit.parent === parent) continue;
+    const { u, v } = basis(parent ? 1.0 : 0.12);
+    n.__orbit = parent
+      ? { parent, u, v, r: 12 + radius(parent) * 2.2 + Math.random() * 14, speed: 0.25 + Math.random() * 0.45, phase: Math.random() * 7 }
+      : { parent: null, u, v, r: Math.random() * 60, speed: 0.035 + Math.random() * 0.03, phase: Math.random() * 7, dy: (Math.random() - .5) * 24 };
+  }
+}
+
+function radius(n) {
+  if (n.type === "source") return 1.3 + Math.sqrt(n.degree || 0) * 0.3;
+  return (n.type === "schedule" ? 5 : 3) + Math.sqrt(n.degree || 0) * 1.5;
+}
+function nodeObject(n) {
+  const color = new THREE.Color(colorOf(n)), r = radius(n), g = new THREE.Group();
+  const additive = { blending: THREE.AdditiveBlending, depthWrite: false, transparent: true };
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, opacity: n.type === "source" ? .85 : .38, ...additive }));
+  halo.scale.setScalar(r * (n.type === "source" ? 5 : 7));
+  g.add(halo);
+  const vis = { halo, haloOpacity: halo.material.opacity, twinkle: 0.6 + Math.random() * 1.6, phase: Math.random() * 7 };
+  if (n.type !== "source") {
+    const core = new THREE.Mesh(SPHERE, new THREE.MeshBasicMaterial({ color: color.clone().lerp(WHITE, .12), transparent: true }));
+    core.scale.setScalar(r); g.add(core); vis.core = core;
+    if (n.degree >= 5) {   // 많이 이어진 행성에는 고리를 두른다
+      const ring = new THREE.Mesh(RING, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, opacity: .35, ...additive }));
+      ring.scale.setScalar(r); ring.rotation.set(Math.PI / 2 + (Math.random() - .5) * .9, (Math.random() - .5) * .6, 0);
+      g.add(ring); vis.ring = ring;
+    }
+    const el = document.createElement("div");
+    el.className = "label" + (n.degree >= 6 ? " big" : ""); el.textContent = short(n.title);
+    const label = new CSS2DObject(el); label.center.set(0.5, -0.9); g.add(label); vis.label = label;
+    // 노드가 걸러져 장면에서 빠지면 라벨 요소도 떼어 낸다 (다시 보이면 렌더러가 붙인다)
+    g.addEventListener("removed", () => el.remove());
+  }
+  n.__vis = vis;
+  return g;
+}
+function recolor(n) {
+  const v = n.__vis;
+  if (!v) return;
+  const color = new THREE.Color(colorOf(n));
+  v.halo.material.color.copy(color);
+  v.core?.material.color.copy(color.clone().lerp(WHITE, .12));
+  v.ring?.material.color.copy(color);
+}
+const short = t => t.length > 16 ? t.slice(0, 15) + "…" : t;
+function linkTint(l) {
+  const a = end(l.source), b = end(l.target);
+  return colorOf(a?.type === "source" ? a : b?.type === "source" ? b : a || b);
+}
+
+// 강조: 가리키거나 고른 노드와 이웃만 밝게
 function lit(l) {
   const a = state.hover || state.focus;
-  return a && (end(l.source) === a || end(l.target) === a);
+  return !!a && (end(l.source) === a || end(l.target) === a);
 }
-function setNeighbors() {
+function highlight() {
   const a = state.hover || state.focus;
   state.neighbors = new Set();
-  if (!a) return;
-  for (const l of fg.graphData().links) {
+  if (a) for (const l of fg.graphData().links) {
     if (end(l.source) === a) state.neighbors.add(end(l.target));
     if (end(l.target) === a) state.neighbors.add(end(l.source));
   }
+  for (const n of fg.graphData().nodes) {
+    const v = n.__vis;
+    if (!v) continue;
+    const on = !a || a === n || state.neighbors.has(n);
+    v.dim = !on;
+    if (v.core) v.core.material.opacity = on ? 1 : .12;
+    if (v.ring) v.ring.material.opacity = on ? .35 : .04;
+    if (v.label) v.label.element.style.opacity = labelShown(n, a) ? 1 : 0;
+  }
+  fg.linkColor(fg.linkColor()).linkWidth(fg.linkWidth()).linkDirectionalParticles(fg.linkDirectionalParticles());
+}
+function labelShown(n, a) {
+  if (a) return a === n || state.neighbors.has(n);
+  return state.labeled.has(n.id);
 }
 
-function drawNode(n, ctx, scale) {
-  if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) return;
-  const r = radius(n), color = colorOf(n), a = state.hover || state.focus;
-  const dim = a && a !== n && !state.neighbors.has(n);
-  ctx.globalAlpha = dim ? 0.15 : 1;
-  // 새로 생긴 노드는 1.5초 동안 퍼지는 고리를 그린다
-  const born = state.born.get(n.id);
-  if (born) {
-    const t = (performance.now() - born) / 1500;
-    if (t < 1) {
-      ctx.beginPath(); ctx.arc(n.x, n.y, r + 2 + t * 22, 0, 2 * Math.PI);
-      ctx.strokeStyle = color; ctx.globalAlpha = (1 - t) * (dim ? .15 : .9); ctx.lineWidth = 2 / scale * 1.5; ctx.stroke();
-      ctx.globalAlpha = dim ? 0.15 : 1;
-    } else state.born.delete(n.id);
+// 배경: 먼 별, 성운, 은하 원반의 먼지와 가운데 빛
+const scene = fg.scene();
+(function sky() {
+  const N = 4500, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), tint = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    const r = 1800 + Math.random() * 2600, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+    pos.set([r * Math.sin(ph) * Math.cos(th), r * Math.cos(ph), r * Math.sin(ph) * Math.sin(th)], i * 3);
+    tint.setHSL(0.55 + Math.random() * 0.15, 0.4, 0.6 + Math.random() * 0.4); col.set([tint.r, tint.g, tint.b], i * 3);
   }
-  if (n.type !== "source") {
-    ctx.beginPath(); ctx.arc(n.x, n.y, r * 2.2, 0, 2 * Math.PI);
-    const g = ctx.createRadialGradient(n.x, n.y, r * .4, n.x, n.y, r * 2.2);
-    g.addColorStop(0, color + "55"); g.addColorStop(1, color + "00");
-    ctx.fillStyle = g; ctx.fill();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.4, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: .85, depthWrite: false })));
+  const hues = ["--call", "--message", "--email", "--kakao", "--call"];
+  hues.forEach((h, i) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HAZE, color: new THREE.Color(css(h)), opacity: .035, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    const a = i / hues.length * Math.PI * 2 + Math.random();
+    s.position.set(Math.cos(a) * 1500, (Math.random() - .5) * 900, Math.sin(a) * 1500); s.scale.setScalar(1400 + Math.random() * 900);
+    scene.add(s);
+  });
+})();
+const disc = (function galaxyDust() {
+  const N = 3200, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), arms = 3, c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    const d = Math.pow(Math.random(), 0.7), arm = i % arms;
+    const a = arm / arms * Math.PI * 2 + d * 5.5 + (Math.random() - .5) * 0.9 * (1 - d * .5);
+    const r = 30 + d * 300 + (Math.random() - .5) * 26;
+    pos.set([Math.cos(a) * r, (Math.random() - .5) * 18 * (1 - d * .6), Math.sin(a) * r], i * 3);
+    c.setHSL(0.6 + Math.random() * 0.12, 0.5, 0.35 + (1 - d) * 0.35); col.set([c.r, c.g, c.b], i * 3);
   }
-  ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
-  ctx.fillStyle = color; ctx.fill();
-  if (n === a) { ctx.lineWidth = 2 / scale; ctx.strokeStyle = css("--text"); ctx.stroke(); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: GLOW, size: 2.2, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: .65, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: HAZE, color: new THREE.Color("#9fb4ff"), opacity: .22, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  core.scale.setScalar(260);
+  const group = new THREE.Group(); group.add(pts, core); scene.add(group);
+  return group;
+})();
 
-  const showLabel = n === a || state.neighbors.has(n)
-    || (n.type !== "source" && (scale > 1.1 || n.degree >= 4 || (state.entities < 150 && scale > 0.7)))
-    || (n.type === "source" && scale > 3.2);
-  if (showLabel && !dim) {
-    const size = Math.max(10, (n.type === "source" ? 9 : 12)) / scale;
-    ctx.font = `${n.type === "source" ? 400 : 500} ${size}px "Noto Sans KR", sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "top";
-    const label = shortTitle(n);
-    ctx.lineWidth = 3 / scale; ctx.strokeStyle = css("--bg"); ctx.strokeText(label, n.x, n.y + r + 2 / scale);
-    ctx.fillStyle = n.type === "source" ? css("--text-2") : css("--text");
-    ctx.fillText(label, n.x, n.y + r + 2 / scale);
-  }
-  ctx.globalAlpha = 1;
-}
-function shortTitle(n) {
-  const t = n.type === "source" ? n.title.replace(/^#\d+\s+\S+\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s*/, "") : n.title;
-  return t.length > 18 ? t.slice(0, 17) + "…" : t;
-}
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.75, 0.5, 0.18);
+fg.postProcessingComposer().addPass(bloom);
 
-function tip(n) {
-  const el = document.getElementById("tip");
-  if (!n) { el.style.display = "none"; return; }
-  el.innerHTML = "";
-  const b = document.createElement("b"); b.textContent = n.title; el.append(b);
-  const kind = n.type === "source" ? `자료 · ${sourceLabel(n.source)}` : TYPES.find(t => t[0] === n.type)?.[1] || n.type;
-  el.append(`${kind} · 연결 ${n.degree}`);
-  if (n.summary) { const p = document.createElement("div"); p.style.marginTop = "4px"; p.textContent = n.summary; el.append(p); }
-  el.style.display = "block";
-}
-document.addEventListener("mousemove", e => {
-  const el = document.getElementById("tip");
-  el.style.left = Math.min(e.clientX + 14, innerWidth - 300) + "px";
-  el.style.top = (e.clientY + 14) + "px";
-});
+const controls = fg.controls();
+controls.autoRotate = true; controls.autoRotateSpeed = 0.45; controls.enableDamping = true;
+
+// 매 프레임: 별이 깜빡이고, 새로 생긴 노드가 부풀며 나타나고, 은하 먼지가 천천히 돈다
+(function frame() {
+  const t = performance.now() / 1000;
+  disc.rotation.y = -t * 0.02;
+  let far = 0;
+  for (const n of fg.graphData().nodes) {
+    const v = n.__vis;
+    if (!v) continue;
+    if (n.type !== "source" && Number.isFinite(n.x)) far = Math.max(far, Math.hypot(n.x, n.z));
+    const born = state.born.get(n.id);
+    let boost = 1;
+    if (born) {
+      const k = (performance.now() - born) / 1600;
+      if (k >= 1) state.born.delete(n.id); else boost = 1 + (1 - k) * 3.5;
+    }
+    v.halo.material.opacity = (v.dim ? .06 : v.haloOpacity * (0.82 + 0.18 * Math.sin(t * v.twinkle + v.phase))) * Math.min(boost, 2);
+    v.halo.scale.setScalar(radius(n) * (n.type === "source" ? 5 : 7) * boost);
+    if (v.ring) v.ring.rotation.z = t * 0.3;
+  }
+  // 소행성대와 먼지 원반을 행성이 퍼진 크기에 맞춘다
+  if (far) { state.beltR += (far * 1.25 + 40 - state.beltR) * 0.02; disc.scale.setScalar(Math.max(.6, state.beltR / 300)); }
+  requestAnimationFrame(frame);
+})();
 
 function visible(n) {
   if (state.hiddenTypes.has(n.type)) return false;
@@ -274,50 +414,58 @@ function apply() {
   const ids = new Set(nodes.map(n => n.id));
   const before = new Set(fg.graphData().nodes.map(n => n.id));
   const links = state.all.links.filter(l => ids.has(l.sid) && ids.has(l.tid));
-  // 이미 있던 노드의 위치를 이어 쓰도록 같은 객체를 넘긴다. 새로 나타난 노드는 이웃 근처에서 시작한다
+  assignOrbits(nodes, links);
   for (const n of nodes) {
     if (before.has(n.id)) continue;
     if (before.size) state.born.set(n.id, performance.now());
-    if (n.x === undefined) {
+    if (!Number.isFinite(n.x)) {   // 새로 나타난 노드는 이웃 근처에서 시작한다
       const nb = links.find(l => (l.sid === n.id && before.has(l.tid)) || (l.tid === n.id && before.has(l.sid)));
       const p = nb && state.byId.get(nb.sid === n.id ? nb.tid : nb.sid);
-      if (p && p.x !== undefined) { n.x = p.x + (Math.random() - .5) * 20; n.y = p.y + (Math.random() - .5) * 20; }
+      if (p && Number.isFinite(p.x)) { n.x = p.x + (Math.random() - .5) * 20; n.y = p.y + (Math.random() - .5) * 8; n.z = p.z + (Math.random() - .5) * 20; }
     }
   }
+  state.labeled = new Set(nodes.filter(n => n.type !== "source").sort((a, b) => b.degree - a.degree).slice(0, LABELS()).map(n => n.id));
   fg.graphData({ nodes, links: links.map(l => ({ ...l, source: l.sid, target: l.tid })) });
-  state.entities = nodes.filter(n => n.type !== "source").length;
-  setNeighbors();
+  highlight();
   renderStats(nodes, links);
+}
+
+// 사람·기관·주제 페이지 색: 이어진 자료가 가장 많이 들어온 채널
+function channels(data) {
+  const tally = new Map(), byId = new Map(data.nodes.map(n => [n.id, n]));
+  for (const l of data.links) {
+    const a = byId.get(l.source), b = byId.get(l.target);
+    for (const [x, y] of [[a, b], [b, a]]) {
+      if (x?.type === "source" || y?.type !== "source" || !y.source) continue;
+      const t = tally.get(x.id) || {}; t[y.source] = (t[y.source] || 0) + 1; tally.set(x.id, t);
+    }
+  }
+  return id => { const t = tally.get(id); return t ? Object.entries(t).sort((p, q) => q[1] - p[1])[0][0] : null; };
 }
 
 function renderStats(nodes, links) {
   const c = {};
   for (const n of nodes) c[n.type] = (c[n.type] || 0) + 1;
-  const el = document.getElementById("stats");
-  el.innerHTML = "";
+  const el = document.getElementById("stats"); el.innerHTML = "";
   for (const [k, label] of [["person", "사람"], ["org", "기관"], ["topic", "주제"], ["source", "자료"]]) {
-    const s = document.createElement("span"); s.innerHTML = `<b></b>${label}`; s.querySelector("b").textContent = c[k] || 0; el.append(s);
+    const s = document.createElement("span"); s.innerHTML = `<b></b>${label}`; s.querySelector("b").textContent = (c[k] || 0).toLocaleString(); el.append(s);
   }
-  const s = document.createElement("span"); s.innerHTML = "<b></b>연결"; s.querySelector("b").textContent = links.length; el.append(s);
+  const s = document.createElement("span"); s.innerHTML = "<b></b>연결"; s.querySelector("b").textContent = links.length.toLocaleString(); el.append(s);
 }
-
 function renderFilters(data) {
   const types = document.getElementById("types"), sources = document.getElementById("sources");
   types.innerHTML = ""; sources.innerHTML = "";
-  for (const [k, label] of TYPES) {
-    if (!data.counts[k]) continue;
-    const color = k === "source" ? `conic-gradient(${css("--call")} 0 25%, ${css("--message")} 0 50%, ${css("--email")} 0 75%, ${css("--kakao")} 0)` : css("--" + k);
-    types.append(chip(label, color, data.counts[k], state.hiddenTypes, k));
-  }
   for (const [k, n] of Object.entries(data.source_counts).sort((a, b) => b[1] - a[1])) {
-    sources.append(chip(sourceLabel(k), css("--" + k) || css("--other"), n, state.hiddenSources, k));
+    sources.append(chip(sourceLabel(k), channelColor(k), n, state.hiddenSources, k));
   }
+  for (const [k, label] of TYPES) if (data.counts[k]) types.append(chip(label, null, data.counts[k], state.hiddenTypes, k));
 }
 function chip(label, color, n, set, key) {
   const b = document.createElement("button");
   b.className = "chip" + (set.has(key) ? " off" : "");
   b.innerHTML = '<span class="dot"></span><span class="l"></span><span class="n"></span>';
-  b.querySelector(".dot").style.background = color;
+  const dot = b.querySelector(".dot");
+  if (color) { dot.style.background = color; dot.style.color = color; } else dot.classList.add("plain");
   b.querySelector(".l").textContent = label;
   b.querySelector(".n").textContent = n.toLocaleString();
   b.onclick = () => { set.has(key) ? set.delete(key) : set.add(key); b.classList.toggle("off"); apply(); };
@@ -337,15 +485,24 @@ document.getElementById("q").addEventListener("input", e => {
 });
 document.getElementById("fold").onclick = () => document.getElementById("filters").classList.toggle("unfold");
 
-// 상세 패널
+// 회전
+const spin = document.getElementById("spin");
+function setSpin(on) { controls.autoRotate = on; spin.classList.toggle("on", on); spin.setAttribute("aria-pressed", on); }
+spin.onclick = () => setSpin(!controls.autoRotate);
+
+// 상세 패널. 고른 노드로 카메라가 날아간다
 async function open(id) {
   const n = state.byId.get(id);
   if (n && !fg.graphData().nodes.includes(n)) {   // 걸러진 노드면 보이게 한다
     state.hiddenTypes.delete(n.type); if (n.source) state.hiddenSources.delete(n.source);
     state.until = Infinity; setScrub(state.times.length); renderFilters(state.data); apply();
   }
-  state.focus = n || null; setNeighbors();
-  if (n && n.x !== undefined) { fg.centerAt(n.x, n.y, 700); fg.zoom(Math.max(fg.zoom(), 2.2), 700); }
+  state.focus = n || null; highlight();
+  if (n && Number.isFinite(n.x)) {
+    setSpin(false);
+    const d = n.type === "source" ? 90 : 170, h = Math.hypot(n.x, n.y, n.z) || 1, k = 1 + d / h;
+    fg.cameraPosition({ x: n.x * k, y: n.y * k + 30, z: n.z * k }, { x: n.x, y: n.y, z: n.z }, 1400);
+  }
   const res = await fetch("/wiki/page?path=" + encodeURIComponent(id), { credentials: "same-origin" });
   if (!res.ok) return;
   const page = await res.json();
@@ -355,10 +512,11 @@ async function open(id) {
   const kind = document.createElement("div"); kind.className = "kind";
   kind.innerHTML = '<span class="dot"></span><span></span>';
   kind.querySelector(".dot").style.background = n ? colorOf(n) : css("--other");
-  kind.lastChild.textContent = n?.type === "source" ? `자료 · ${sourceLabel(n.source)}` : (TYPES.find(t => t[0] === page.type)?.[1] || page.type);
+  kind.lastChild.textContent = n?.type === "source" ? `자료 · ${sourceLabel(n.source)}`
+    : typeLabel(page.type) + (n?.channel ? ` · 주로 ${sourceLabel(n.channel)}` : "");
   const md = document.createElement("div"); md.className = "md";
   md.innerHTML = DOMPurify.sanitize(marked.parse(page.markdown));
-  // 위키 안 링크는 그래프에서 그 노드로 옮겨 간다
+  // 위키 안 링크는 그 노드로 옮겨 간다
   for (const a of md.querySelectorAll("a[href]")) {
     const href = a.getAttribute("href");
     if (/^[a-z]+:/i.test(href) || !href.split("#")[0].endsWith(".md")) { a.target = "_blank"; a.rel = "noopener"; continue; }
@@ -381,8 +539,15 @@ async function open(id) {
   el.classList.add("open"); el.scrollTop = 0;
 }
 function closeDetail() {
+  const wasOpen = document.getElementById("detail").classList.contains("open");
   document.getElementById("detail").classList.remove("open");
-  state.focus = null; setNeighbors();
+  state.focus = null; highlight();
+  if (wasOpen) { overview(1600); setSpin(true); }
+}
+function overview(ms) {
+  // 세로 화면은 좌우 시야가 좁아서 더 멀리서 본다
+  const r = Math.max(260, state.beltR * 1.9) * Math.max(1, 0.75 * innerHeight / innerWidth);
+  fg.cameraPosition({ x: 0, y: r * 0.55, z: r }, { x: 0, y: 0, z: 0 }, ms);
 }
 
 // 타임라인: 노드가 처음 커밋된 시각 순서로 위키가 자라는 과정을 되감는다
@@ -408,29 +573,36 @@ function stop() { clearInterval(timer); timer = null; state.playing = false; doc
 document.getElementById("play").onclick = () => {
   if (state.playing) return stop();
   if (!state.times.length) return;
+  closeDetail();
   state.playing = true; document.getElementById("play").innerHTML = PAUSE_SVG;
   let i = +scrub.value >= state.times.length ? 0 : +scrub.value;
-  fg.graphData({ nodes: [], links: [] });
-  for (const n of state.all.nodes) { delete n.x; delete n.y; delete n.vx; delete n.vy; }
-  // 커밋이 많아도 20초 안에 끝나게 간격을 정한다
-  const step = Math.max(80, Math.min(900, 20000 / state.times.length));
+  if (i === 0) {   // 처음부터: 빈 우주에서 시작한다
+    fg.graphData({ nodes: [], links: [] });
+    for (const n of state.all.nodes) { for (const k of ["x", "y", "z", "vx", "vy", "vz"]) delete n[k]; n.__orbit = null; }
+    state.beltR = 120; overview(1200);
+  }
+  setSpin(true);
+  // 커밋이 많아도 25초 안에 끝나게 간격을 정한다
+  const step = Math.max(90, Math.min(1000, 25000 / state.times.length));
   setScrub(i); apply();
   timer = setInterval(() => {
     i += 1; setScrub(i); apply();
-    if (i >= state.times.length) { stop(); setTimeout(() => fg.zoomToFit(900, 80), 600); }
+    if (i >= state.times.length) { stop(); setTimeout(() => overview(2500), 800); }
   }, step);
 };
 
 async function load(first) {
   const res = await fetch("/wiki/graph", { credentials: "same-origin" });
-  if (!res.ok) { document.getElementById("empty").textContent = "그래프를 불러오지 못했습니다 (" + res.status + ")"; document.getElementById("empty").style.display = "grid"; return; }
+  if (!res.ok) { const e = document.getElementById("empty"); e.textContent = "그래프를 불러오지 못했습니다 (" + res.status + ")"; e.style.display = "grid"; return; }
   const data = await res.json();
   state.data = data;
   if (first && (data.counts.source || 0) > MANY_SOURCES) state.hiddenTypes.add("source");
-  const fresh = [];
+  const channelOf = channels(data);
   for (const n of data.nodes) {
+    n.channel = n.type === "source" ? null : channelOf(n.id);
     const old = state.byId.get(n.id);
-    if (old) Object.assign(old, n); else { state.byId.set(n.id, n); if (!first) fresh.push(n.id); }
+    if (old) { const recolored = old.channel !== n.channel; Object.assign(old, n); if (recolored) recolor(old); }
+    else state.byId.set(n.id, n);
   }
   const ids = new Set(data.nodes.map(n => n.id));
   for (const id of [...state.byId.keys()]) if (!ids.has(id)) state.byId.delete(id);
@@ -443,13 +615,11 @@ async function load(first) {
   renderFilters(data);
   if (state.playing) return;
   if (first || state.until === Infinity) setScrub(state.times.length);
-  apply();
-  for (const id of fresh) state.born.set(id, performance.now());
-  if (first) setTimeout(() => fg.zoomToFit(800, 80), 1200);
+  apply();   // 새 자료가 위키에 들어오면 그 별이 부풀며 나타난다
+  if (first) { overview(0); setTimeout(() => overview(2500), 2500); }
 }
-// 새 자료가 위키에 들어오면 노드가 반짝이며 나타난다
 load(true).then(() => setInterval(() => load(false), POLL_MS));
-addEventListener("resize", () => fg.width(innerWidth).height(innerHeight));
+addEventListener("resize", () => { fg.width(innerWidth).height(innerHeight); bloom.setSize(innerWidth, innerHeight); });
 </script>
 </body>
 </html>
