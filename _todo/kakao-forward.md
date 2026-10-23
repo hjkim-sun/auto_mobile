@@ -19,7 +19,7 @@
 
 - `Notification posted?` 의 Extras 에 `android.messages` 가 없다(Bundle 배열은 넘기지 않는다). 마지막 메시지의 `chatLogId` 가 extras 최상위에 온다. 알림 갱신 한 번이 메시지 하나다.
 - `android.title` 은 방 이름이 아니라 마지막 메시지를 보낸 사람이다. ticker 는 `보낸사람 : 본문`. 단톡방 이름은 알림 어디에도 없다(shortcut 라벨에만 있다).
-- `isGroupConversation` 은 1:1 방도 true 다. 알림 id 는 모든 방이 2 이고 tag(방 id)는 Automate 가 주지 않는다.
+- 단톡 여부는 `isGroupConversation` 으로 안다(1:1 방은 false). 알림 id 는 모든 방이 2 이고 tag(방 id)는 Automate 가 주지 않는다.
 - 그래서 오픈채팅은 채널로 거른다: 카톡에서 오픈채팅방 알림을 끄고 `new_message_v6` 만 받는다.
 - Automate 숫자는 double 이라 19자리 chatLogId 의 끝자리가 뭉개진다(512 단위). 메시지마다 id 가 크게 벌어져 중복 판정에는 문제없다.
 - `when` 은 초 단위(소수)다.

@@ -6,6 +6,7 @@ API와 메일 폴러는 받은 데이터를 저장만 한다. 판별은 별도 �
 sequenceDiagram
     autonumber
     participant C as Client<br/>(폰 Automate)
+    participant X as 맥 kakaocli<br/>(tools/kakao_sync.py)
     participant M as 메일 폴러<br/>(app/jobs/mail_poller.py)
     participant N as IMAP<br/>(imap.naver.com)
     box API 프로세스 (uvicorn)
@@ -30,6 +31,12 @@ sequenceDiagram
         C->>A: POST /v1/ingest/kakao<br/>알림 채널 new_message_v6(알림 켠 방)의 알림 갱신마다 {title, message, ticker, when, channel, extras}
         A->>S: data/raw/kakao/YYYYMMDD/{chatLogId}.json, events 행 추가 (source=kakao)<br/>같은 보낸 사람의 앞 메시지 5건을 맥락으로 붙임
         A-->>C: 묶음 요약 알림이나 다른 채널은 200 {ignored: true}
+    end
+
+    opt 카카오톡 대화 기록 (맥에서 수동 실행)
+        X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음<br/>1:1 방·단톡방만, 최근 N일(기본 30)
+        X->>A: POST /v1/ingest/kakao/history {rooms, messages}
+        A->>S: data/raw/kakao/rooms.json(방 목록·단톡 참여자),<br/>personal/{상대 이름}.csv, group/{chat_id}.csv 에 log_id 로 중복 거르고 log_id 순으로 저장<br/>events 행은 만들지 않음 (판별 대상 아님)
     end
 
     opt MMS 첨부 (2026-10-21부터 폰 플로우가 보내지 않음)

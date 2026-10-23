@@ -35,7 +35,7 @@ API, 저장 경로, 실행 방법은 README.md에 정리돼 있다.
 | SMS MMS forward | 10 (SMS 본문) | `POST /v1/ingest/messages` |
 | SMS MMS forward | 16 (MMS 본문) | `POST /v1/ingest/messages` |
 | 통화녹음전송 | 3 | `POST /v1/ingest/calls?filename=&direction=&number=&name=&call_date=` |
-| KakaoTalk forward | 3 | `POST /v1/ingest/kakao` (블록 2 `Notification posted?`: 패키지 `com.kakao.talk`, 채널 `new_message_v6`) |
+| KakaoTalk forward | 3 | `POST /v1/ingest/kakao` (블록 2 `Notification posted?`: 패키지 `com.kakao.talk`, 채널 `new_message_v6`, Exclude flags `Group summary`) |
 
 MMS 첨부 전송(`PUT .../attachments/...`)은 2026-10-21 플로우에서 뺐다. 서버 엔드포인트는 남아 있다.
 

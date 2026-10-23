@@ -202,7 +202,7 @@ def kakao_message(note: dict) -> dict | None:
 
     카카오톡은 방마다 알림 하나를 새 메시지로 갱신하고, Automate 는 갱신마다 블록을 통과시킨다.
     - android.title 은 방 이름이 아니라 마지막 메시지를 보낸 사람이다. 단톡방 이름은 알림 어디에도 없다
-      (안드로이드는 shortcut 라벨로 보여 주는데 Automate 는 읽지 못한다). isGroupConversation 은 1:1 방도 true 다.
+      (안드로이드는 shortcut 라벨로 보여 주는데 Automate 는 읽지 못한다). 단톡 여부는 isGroupConversation 으로 안다.
     - Automate 는 extras 의 android.messages(Bundle 배열)를 넘기지 않는다. 마지막 메시지의 chatLogId 는
       extras 최상위에 있다.
     """
@@ -215,11 +215,13 @@ def kakao_message(note: dict) -> dict | None:
         return None
     m = KAKAO_TICKER_RE.match(str(note.get("ticker") or ""))   # "보낸사람 : 본문"
     room = extras.get("android.conversationTitle") or extras.get("android.hiddenConversationTitle")
+    group = extras.get("android.isGroupConversation")
     try:   # Automate 숫자는 double 이라 19자리 chatLogId 는 끝자리가 뭉개져 올 수 있다
         chat_log_id = int(float(extras["chatLogId"]))
     except (KeyError, TypeError, ValueError, OverflowError):
         chat_log_id = None
-    return {"sender": m.group(1) if m else title, "room": str(room) if room else None, "text": str(text),
+    return {"sender": m.group(1) if m else title, "room": str(room) if room else None,
+            "group": group if isinstance(group, bool) else None, "text": str(text),
             "time": note.get("when"), "channel": note.get("channel"), "chat_log_id": chat_log_id}
 
 

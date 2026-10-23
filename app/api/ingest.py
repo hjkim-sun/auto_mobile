@@ -10,6 +10,8 @@ PUT  /v1/ingest/messages/{message_key}/attachments/{part_id}?filename=<파일명
 POST /v1/ingest/emails?account=<naver|gmail>  raw .eml body. 중복 기준: Message-ID (없으면 sha256)
 POST /v1/ingest/kakao                          카카오톡 알림 JSON {title, message, ticker, when, extras}. 중복 기준: chatLogId
                                                요약 알림이나 KAKAO_CHANNELS 밖의 채널은 200 {"ignored": true}
+POST /v1/ingest/kakao/history                  맥 kakaocli 가 읽은 대화 기록 JSON {rooms, messages}.
+                                               방마다 CSV 에 쌓는다(app/services/kakao_history.py). 중복 기준: log_id
 """
 from __future__ import annotations
 
@@ -20,8 +22,9 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from app.api.deps import require_ingest_token
 from app.core.config import get_settings
 from app.repositories import events
-from app.schemas.ingest import CallIngestResponse, IngestResponse, KakaoIngestResponse
-from app.services import ingest, transcribe
+from app.schemas.ingest import (CallIngestResponse, IngestResponse, KakaoHistory, KakaoHistoryResponse,
+                                KakaoIngestResponse)
+from app.services import ingest, kakao_history, transcribe
 
 CALL_TRANSCRIPTS_DIR = "transcripts/calls"
 
@@ -81,3 +84,8 @@ async def ingest_kakao(request: Request, response: Response) -> KakaoIngestRespo
     event_id, created = result
     response.status_code = 201 if created else 200
     return KakaoIngestResponse(event_id=event_id, duplicate=not created)
+
+
+@router.post("/kakao/history", response_model=KakaoHistoryResponse)
+def ingest_kakao_history(history: KakaoHistory) -> KakaoHistoryResponse:
+    return KakaoHistoryResponse(**kakao_history.save_history(history))
