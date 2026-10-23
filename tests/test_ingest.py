@@ -202,3 +202,40 @@ def test_kakao_summary_and_muted_room_notifications_are_ignored(client):
     assert res.status_code == 200
     assert res.json() == {"event_id": None, "duplicate": False, "ignored": True}
     assert raw_files("kakao") == []
+
+
+def history_csv(file):
+    path = get_settings().raw_dir / "kakao" / file
+    return path.read_text(encoding="utf-8").splitlines()
+
+
+def test_kakao_history_is_stored_per_room_and_deduplicated(client):
+    rooms = [{"chat_id": 11, "kind": "personal", "name": "홍길동"},
+             {"chat_id": 22, "kind": "group", "name": "동창", "members": ["홍길동", "김철수"]}]
+    first = [{"chat_id": 22, "log_id": 3956491548220755074, "sent_at": 1792560810, "author": "김철수", "text": "저는 안돼요"},
+             {"chat_id": 11, "log_id": 3956491548218755074, "sent_at": 1792560802, "author": "홍길동", "text": "내일 어때요?"},
+             {"chat_id": 99, "log_id": 3956491548219000000, "sent_at": 1792560803, "author": "누군가", "text": "오픈채팅"}]
+    res = client.post("/v1/ingest/kakao/history", json={"rooms": rooms, "messages": first})
+    assert res.status_code == 200
+    assert res.json() == {"rooms": 2, "added": 2, "duplicates": 0, "unknown_room": 1}
+    assert history_csv("personal/홍길동.csv") == ["일시,사용자명,톡 내용,log_id",
+                                               "2026-10-21 14:33:22,홍길동,내일 어때요?,3956491548218755074"]
+
+    # 빠진 메시지를 채우면 log_id 순으로 끼워 넣고, 이미 있는 것은 건너뛴다
+    gap = {"chat_id": 22, "log_id": 3956491548219755074, "sent_at": 1792560805, "author": "나", "text": "좋아요"}
+    res = client.post("/v1/ingest/kakao/history", json={"rooms": rooms[1:], "messages": [first[0], gap]})
+    assert res.json() == {"rooms": 1, "added": 1, "duplicates": 1, "unknown_room": 0}
+    assert [line.split(",")[1] for line in history_csv("group/22.csv")[1:]] == ["나", "김철수"]
+
+    from app.services import kakao_history
+    assert kakao_history.groups_of("김철수") == ["22"]
+    assert kakao_history.groups_of("홍길동") == ["22"]
+
+
+def test_kakao_history_personal_rooms_with_same_name_get_separate_files(client):
+    rooms = [{"chat_id": 11, "kind": "personal", "name": "홍길동"},
+             {"chat_id": 12, "kind": "personal", "name": "홍길동"}]
+    client.post("/v1/ingest/kakao/history", json={"rooms": rooms})
+    stored = json.loads((get_settings().raw_dir / "kakao" / "rooms.json").read_text(encoding="utf-8"))
+    assert stored["11"]["file"] == "personal/홍길동.csv"
+    assert stored["12"]["file"] == "personal/홍길동_12.csv"
