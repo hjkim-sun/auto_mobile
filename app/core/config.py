@@ -52,11 +52,13 @@ class Settings(BaseSettings):
     kakao_judge_window: int = Field(default=20, ge=1)
     # 대화가 이만큼 멈추면 판단한다. 맥 동기화가 1분마다라 그보다 조금 길게 잡는다.
     kakao_judge_settle_seconds: float = Field(default=70, ge=0)
+    # 폰 알림이 들어온 방은 메시지마다 바로 오므로 짧게 기다린다. 이어지는 답장("응", "그때 봐")을 묶을 만큼만
+    kakao_judge_phone_settle_seconds: float = Field(default=20, ge=0)
     # 대화가 계속 이어져도 첫 새 메시지 뒤 이만큼 지나면 판단한다
     kakao_judge_max_wait_seconds: float = Field(default=300, ge=0)
     # 이보다 오래된 메시지(맥을 오래 꺼 뒀다 채운 것)는 맥락으로만 쓰고 판단하지 않는다
     kakao_judge_max_age_hours: float = Field(default=12, gt=0)
-    kakao_judge_poll_seconds: float = Field(default=15, gt=0)
+    kakao_judge_poll_seconds: float = Field(default=5, gt=0)
     # Jev 나 Claude 가 실패하면 이만큼 뒤에 다시 판단한다
     kakao_judge_retry_seconds: float = Field(default=300, gt=0)
     kakao_judge_prompt_path: Path = Path("prompts/kakao_judge.md")

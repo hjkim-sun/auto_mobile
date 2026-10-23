@@ -39,6 +39,7 @@ def rooms():
 @pytest.fixture(autouse=True)
 def judge_env(monkeypatch):
     monkeypatch.setenv("KAKAO_JUDGE_SETTLE_SECONDS", "0")
+    monkeypatch.setenv("KAKAO_JUDGE_PHONE_SETTLE_SECONDS", "0")
     monkeypatch.setenv("CALENDAR_ENABLED", "true")
     get_settings.cache_clear()
     init_db()
@@ -134,6 +135,20 @@ def test_conversation_still_going_waits_for_settle(client, fake, monkeypatch):
     monkeypatch.setenv("KAKAO_JUDGE_MAX_WAIT_SECONDS", "0")
     get_settings.cache_clear()
     assert kakao_judge.run_due() == 1
+
+
+def test_phone_rooms_wait_shorter(client, fake, monkeypatch):
+    monkeypatch.setenv("KAKAO_JUDGE_SETTLE_SECONDS", "70")
+    monkeypatch.setenv("KAKAO_JUDGE_PHONE_SETTLE_SECONDS", "0")
+    get_settings.cache_clear()
+    history(client, 11, [("홍길동", "ㅋㅋ")])
+    history(client, 22, [("홍길동", "ㅎㅎ")])
+    rooms_now = kakao_history.load_rooms()
+    rooms_now["22"]["phone"] = True
+    kakao_history._save_rooms(rooms_now)
+    assert list(kakao_history.due_rooms(time.time(), 70, 0, 300)) == ["22"]
+    assert kakao_judge.run_due() == 1
+    assert "phone" not in rooms()["22"] and "unjudged_since" in rooms()["11"]
 
 
 def test_failure_keeps_room_waiting_and_retries_later(client, fake, monkeypatch):

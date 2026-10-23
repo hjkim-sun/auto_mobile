@@ -74,7 +74,7 @@ payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위
 
 카톡 판단은 메시지마다 하지 않고 방 단위로 한다(`app/services/kakao_judge.py`, 워커의 스레드).
 메시지마다 최근 대화를 묶어 던지면 창이 거의 겹쳐 같은 판단이 연달아 나오기 때문이다.
-1. 판단 대기 방 중 대화가 `KAKAO_JUDGE_SETTLE_SECONDS`(70초) 멈췄거나 첫 새 메시지 뒤 `KAKAO_JUDGE_MAX_WAIT_SECONDS`(5분)가 지난 방을 고른다.
+1. 판단 대기 방 중 대화가 `KAKAO_JUDGE_SETTLE_SECONDS`(70초, 폰 알림이 들어온 방은 `KAKAO_JUDGE_PHONE_SETTLE_SECONDS` 20초) 멈췄거나 첫 새 메시지 뒤 `KAKAO_JUDGE_MAX_WAIT_SECONDS`(5분)가 지난 방을 고른다.
 2. 방 CSV 의 최근 `KAKAO_JUDGE_WINDOW`(20)건을 Jev 에 준다. 판단 열이 빈 메시지에 ▶ 를 붙여 그것만 판단하게 한다(`prompts/kakao.toml`).
    `KAKAO_JUDGE_MAX_AGE_HOURS`(12시간)보다 오래된 메시지는 맥락으로만 쓴다. noise 면 `jev 판단` 열에 `noise 0.12`.
 3. useful 이면 Claude(`claude -p`, 위키 읽기 전용, `prompts/kakao_judge.md`)가 다시 보고 캘린더에 넣을 일정을 고른다.
