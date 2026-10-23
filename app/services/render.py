@@ -77,6 +77,8 @@ def render_message(msg: dict) -> str | None:
 
 
 def render_kakao(msg: dict) -> str:
+    if msg.get("log_ids"):   # 방 단위 판단(kakao_judge)이 만든 이벤트. text 가 최근 대화 전체다
+        return msg["text"]
     lines = ["[카카오톡" + (" 단톡" if msg.get("group") else "") + "]" + (f" 방: {msg['room']}" if msg.get("room") else ""),
              f"보낸 사람: {msg.get('sender')}", f"시각: {msg.get('date_text')}"]
     if msg.get("context"):

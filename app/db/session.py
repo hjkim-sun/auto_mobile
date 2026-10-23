@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS events (
     dedup_key    TEXT NOT NULL UNIQUE,
     payload      TEXT NOT NULL,            -- JSON 메타데이터
     raw_path     TEXT,                     -- data_dir 기준 원본 경로
-    status       TEXT NOT NULL DEFAULT 'pending',  -- transcribing(통화 전사 중) | pending | processing | kept | discarded | failed
+    status       TEXT NOT NULL DEFAULT 'pending',  -- transcribing(통화 전사 중) | pending | processing | kept | discarded | filed(카톡, 방 단위 판단) | failed
     verdict      TEXT,                     -- JSON 판별 결과
     attempts     INTEGER NOT NULL DEFAULT 0,
     error        TEXT,

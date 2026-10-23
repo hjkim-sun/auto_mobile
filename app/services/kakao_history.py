@@ -5,8 +5,12 @@ data/raw/kakao/
   personal/{상대 이름}.csv     1:1 방
   group/{chat_id}.csv         단톡방
 
-CSV 열은 일시, 사용자명, 톡 내용, log_id 이다. log_id 는 카카오 서버가 매긴 메시지 ID 로, 폰 알림의
-chatLogId 와 같은 값이고 시간 순으로 커진다. 같은 log_id 는 한 번만 넣고, 파일은 log_id 순으로 다시 쓴다.
+CSV 열은 일시, 사용자명, 톡 내용, log_id, jev 판단, claude 판단 이다. log_id 는 카카오 서버가 매긴 메시지 ID 로,
+폰 알림의 chatLogId 와 같은 값이고 시간 순으로 커진다. 같은 log_id 는 한 번만 넣고, 파일은 log_id 순으로 다시 쓴다.
+판단 두 열은 방 단위 판단(app/services/kakao_judge.py)이 채운다. 비어 있으면 아직 판단하지 않은 메시지다.
+
+새 메시지가 들어간 방은 rooms.json 에 unjudged_since(처음 들어온 시각)와 last_added(마지막으로 들어온 시각)를
+적어 판단 대기로 둔다. 판단이 끝나면 mark_judged 가 지운다.
 
 폰 알림(POST /v1/ingest/kakao)으로 온 메시지도 워커가 판별 전에 file_notification 으로 같은 CSV 에 넣는다.
 - 1:1 방 알림은 보낸 사람 이름의 personal 방에 넣는다. 맥에서 아직 받지 못한 방이면 "name:{이름}" 으로 임시 등록한다.
@@ -21,6 +25,7 @@ import bisect
 import csv
 import fcntl
 import json
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -31,7 +36,7 @@ from app.schemas.ingest import KakaoHistory
 from app.services import jev
 from app.services.ingest import safe_name
 
-COLUMNS = ["일시", "사용자명", "톡 내용", "log_id"]
+COLUMNS = ["일시", "사용자명", "톡 내용", "log_id", "jev 판단", "claude 판단"]
 UNASSIGNED = "group/unassigned.csv"
 LOG_ID_SLACK = 512    # 폰 chatLogId 오차(±256)를 넉넉히 덮는 폭
 ROOM_CONTEXT = 8      # Jev 에 보여 줄 후보 방마다의 최근 메시지 수
@@ -79,7 +84,19 @@ def read_rows(path: Path) -> list[list[str]]:
     if not path.exists():
         return []
     with path.open(encoding="utf-8", newline="") as f:
-        return list(csv.reader(f))[1:]
+        rows = list(csv.reader(f))[1:]
+    # 판단 열이 생기기 전에 쓴 파일은 4열이다
+    return [r + [""] * (len(COLUMNS) - len(r)) for r in rows]
+
+
+def _write(path: Path, rows: list[list[str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(COLUMNS)
+        w.writerows(rows)
+    tmp.replace(path)
 
 
 def _merge(path: Path, rows: list[list[str]]) -> int:
@@ -88,26 +105,27 @@ def _merge(path: Path, rows: list[list[str]]) -> int:
     ids = [int(r[3]) for r in existing]
     added = changed = 0
     for row in rows:
+        row = row + [""] * (len(COLUMNS) - len(row))
         log_id = int(row[3])
         i = bisect.bisect_left(ids, log_id - LOG_ID_SLACK)
         if i < len(ids) and ids[i] <= log_id + LOG_ID_SLACK:
-            # 폰 알림 값(512 의 배수)이 먼저 들어가 있으면 맥이 준 정확한 행으로 바꾼다
+            # 폰 알림 값(512 의 배수)이 먼저 들어가 있으면 맥이 준 정확한 행으로 바꾼다. 판단 결과는 남긴다
             if ids[i] != log_id and ids[i] % LOG_ID_SLACK == 0 and log_id % LOG_ID_SLACK:
-                existing[i], ids[i] = row, log_id
+                existing[i], ids[i] = row[:4] + existing[i][4:], log_id
                 changed += 1
             continue
         existing.insert(i, row)
         ids.insert(i, log_id)
         added += 1
     if added or changed:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        with tmp.open("w", encoding="utf-8", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(COLUMNS)
-            w.writerows(existing)
-        tmp.replace(path)
+        _write(path, existing)
     return added
+
+
+def _flag(room: dict, now: float) -> None:
+    """새 메시지가 들어간 방을 판단 대기로 둔다."""
+    room.setdefault("unjudged_since", now)
+    room["last_added"] = now
 
 
 def save_history(history: KakaoHistory) -> dict[str, int]:
@@ -121,18 +139,21 @@ def save_history(history: KakaoHistory) -> dict[str, int]:
             rooms[cid] = {"kind": room.kind, "name": room.name,
                           "file": old.get("file") or _room_file(rooms, cid, room.kind, room.name),
                           "members": sorted(set(old.get("members", [])) | set(room.members))}
-        _save_rooms(rooms)
 
-        by_file: dict[str, list[list[str]]] = {}
+        by_room: dict[str, list[list[str]]] = {}
         unknown = 0
         for m in history.messages:
-            room = rooms.get(str(m.chat_id))
-            if room is None:   # rooms 에 없는 방(오픈채팅 등)의 메시지는 받지 않는다
+            if str(m.chat_id) not in rooms:   # rooms 에 없는 방(오픈채팅 등)의 메시지는 받지 않는다
                 unknown += 1
                 continue
             when = datetime.fromtimestamp(m.sent_at, tz).strftime("%Y-%m-%d %H:%M:%S")
-            by_file.setdefault(room["file"], []).append([when, m.author, m.text, str(m.log_id)])
-        added = sum(_merge(kakao_dir() / file, rows) for file, rows in by_file.items())
+            by_room.setdefault(str(m.chat_id), []).append([when, m.author, m.text, str(m.log_id)])
+        added = 0
+        for cid, rows in by_room.items():
+            if n := _merge(kakao_dir() / rooms[cid]["file"], rows):
+                _flag(rooms[cid], time.time())
+                added += n
+        _save_rooms(rooms)
     return {"rooms": len(history.rooms), "added": added,
             "duplicates": len(history.messages) - unknown - added, "unknown_room": unknown}
 
@@ -187,5 +208,45 @@ def file_notification(msg: dict, choose: Callable = choose_room) -> dict | None:
                 _save_rooms(rooms)
             result = {"chat_id": cid, "by": "personal"}
         result["file"] = rooms[result["chat_id"]]["file"] if result["chat_id"] else UNASSIGNED
-        _merge(kakao_dir() / result["file"], [[when, sender, msg["text"], str(msg["chat_log_id"])]])
+        if _merge(kakao_dir() / result["file"], [[when, sender, msg["text"], str(msg["chat_log_id"])]]) \
+                and result["chat_id"]:
+            _flag(rooms[result["chat_id"]], time.time())
+            _save_rooms(rooms)
     return result
+
+
+def due_rooms(now: float, settle: float, max_wait: float) -> dict[str, dict]:
+    """판단할 때가 된 방. 대화가 settle 초 동안 멈췄거나, 첫 새 메시지 뒤 max_wait 초가 지난 방."""
+    with _locked():
+        rooms = load_rooms()
+    return {cid: r for cid, r in rooms.items() if "unjudged_since" in r and now >= r.get("retry_at", 0)
+            and (now - r["last_added"] >= settle or now - r["unjudged_since"] >= max_wait)}
+
+
+def mark_judged(chat_id: str, started: float, marks: dict[str, tuple[str, str]],
+                retry_at: float | None = None) -> None:
+    """판단 결과를 CSV 의 판단 열에 적고 방의 판단 대기를 푼다. marks: log_id → (jev 판단, claude 판단).
+
+    판단하는 동안(started 뒤) 새 메시지가 들어왔으면 대기를 풀지 않는다. retry_at 을 주면 그때 다시 판단한다.
+    """
+    with _locked():
+        rooms = load_rooms()
+        room = rooms.get(chat_id)
+        if room is None:
+            return
+        if marks:
+            path = kakao_dir() / room["file"]
+            rows = read_rows(path)
+            for r in rows:
+                if r[3] in marks:
+                    r[4], r[5] = marks[r[3]]
+            _write(path, rows)
+        if retry_at is not None:
+            room["retry_at"] = retry_at
+        elif room.get("last_added", 0) <= started:
+            for key in ("unjudged_since", "last_added", "retry_at"):
+                room.pop(key, None)
+        else:   # 판단하는 사이 들어온 메시지는 다음 판단에 넘긴다
+            room["unjudged_since"] = started
+            room.pop("retry_at", None)
+        _save_rooms(rooms)
