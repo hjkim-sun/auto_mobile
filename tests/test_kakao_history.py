@@ -62,7 +62,7 @@ def test_phone_notifications_are_filed_into_room_csv(client, fake_jev):
     client.post("/v1/ingest/kakao", json=notification("새친구", "처음 연락드려요", 3956491548220300288, False))
     run(once=True)
 
-    assert csv_rows("personal/홍길동.csv") == [["2026-10-21 14:33:22", "홍길동", "내일 어때요?", "3956491548218755072"]]
+    assert csv_rows("personal/홍길동.csv") == [["2026-10-21 14:33:22", "홍길동", "내일 어때요?", "3956491548218755072", "", ""]]
     assert [r[2] for r in csv_rows("group/22.csv")] == ["다음 모임 언제?", "토요일 좋아"]   # 홍길동의 단톡은 1곳뿐
     assert [r[2] for r in csv_rows("group/33.csv")] == ["보고서 올렸어요", "보고서 확인했어요"]   # 후보 2곳 중 Jev 가 고름
     assert fake_jev == [["room_22", "room_33"]]

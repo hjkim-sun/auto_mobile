@@ -218,8 +218,11 @@ def test_kakao_history_is_stored_per_room_and_deduplicated(client):
     res = client.post("/v1/ingest/kakao/history", json={"rooms": rooms, "messages": first})
     assert res.status_code == 200
     assert res.json() == {"rooms": 2, "added": 2, "duplicates": 0, "unknown_room": 1}
-    assert history_csv("personal/홍길동.csv") == ["일시,사용자명,톡 내용,log_id",
-                                               "2026-10-21 14:33:22,홍길동,내일 어때요?,3956491548218755074"]
+    assert history_csv("personal/홍길동.csv") == ["일시,사용자명,톡 내용,log_id,jev 판단,claude 판단",
+                                               "2026-10-21 14:33:22,홍길동,내일 어때요?,3956491548218755074,,"]
+    # 새 메시지가 들어간 방은 판단 대기가 된다
+    stored = json.loads((get_settings().raw_dir / "kakao" / "rooms.json").read_text(encoding="utf-8"))
+    assert "unjudged_since" in stored["11"] and "unjudged_since" in stored["22"]
 
     # 빠진 메시지를 채우면 log_id 순으로 끼워 넣고, 이미 있는 것은 건너뛴다
     gap = {"chat_id": 22, "log_id": 3956491548219755074, "sent_at": 1792560805, "author": "나", "text": "좋아요"}

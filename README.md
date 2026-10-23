@@ -62,22 +62,40 @@ payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위
 
 카카오톡 대화 기록(`/v1/ingest/kakao/history`)은 맥에서 `tools/kakao_sync.py` 가 보낸다. 맥 카카오톡 DB 를
 [kakaocli](https://github.com/silver-flight-group/kakaocli)로 읽어 1:1 방과 단톡방(오픈채팅·채널·나와의 채팅 제외)의
-최근 N일 메시지를 보낸다. 서버는 방마다 CSV(`일시,사용자명,톡 내용,log_id`)에 log_id 로 중복을 걸러 쌓고, 응답은
-`{"rooms", "added", "duplicates", "unknown_room"}` 이다. 판별(events)에는 넣지 않는다.
+마지막 전송 이후 메시지를 보낸다. 서버는 방마다 CSV(`일시,사용자명,톡 내용,log_id,jev 판단,claude 판단`)에 log_id 로
+중복을 걸러 쌓고, 응답은 `{"rooms", "added", "duplicates", "unknown_room"}` 이다. 새 메시지가 들어간 방은 방 단위 판단 대기가 된다.
 `log_id` 는 폰 알림의 `chatLogId` 와 같은 값이다(Automate 를 거치면 double 이라 끝자리가 ±256 안에서 달라진다).
 
 폰 알림으로 받은 카톡도 워커가 판별 전에 같은 CSV 에 넣는다(`kakao_history.file_notification`).
 1:1 은 보낸 사람 이름의 personal 방에, 단톡은 `rooms.json` 에서 보낸 사람이 참여한 단톡방에 넣는다.
 참여한 단톡방이 여럿이면 Jev 가 후보 방들의 최근 대화를 보고 고르고, 하나도 없으면 `group/unassigned.csv` 에 둔다.
 고른 방은 이벤트 verdict 의 `kakao_room` 에 남는다. 나중에 맥에서 같은 메시지(log_id ±512)가 오면 맥의 정확한 log_id 로 바꾼다.
+방을 찾은 알림 이벤트는 `filed` 로 끝내고 판단은 방 단위로 한다. 방을 모르는 알림(unassigned)만 메시지 하나로 판별한다.
+
+카톡 판단은 메시지마다 하지 않고 방 단위로 한다(`app/services/kakao_judge.py`, 워커의 스레드).
+메시지마다 최근 대화를 묶어 던지면 창이 거의 겹쳐 같은 판단이 연달아 나오기 때문이다.
+1. 판단 대기 방 중 대화가 `KAKAO_JUDGE_SETTLE_SECONDS`(70초) 멈췄거나 첫 새 메시지 뒤 `KAKAO_JUDGE_MAX_WAIT_SECONDS`(5분)가 지난 방을 고른다.
+2. 방 CSV 의 최근 `KAKAO_JUDGE_WINDOW`(20)건을 Jev 에 준다. 판단 열이 빈 메시지에 ▶ 를 붙여 그것만 판단하게 한다(`prompts/kakao.toml`).
+   `KAKAO_JUDGE_MAX_AGE_HOURS`(12시간)보다 오래된 메시지는 맥락으로만 쓴다. noise 면 `jev 판단` 열에 `noise 0.12`.
+3. useful 이면 Claude(`claude -p`, 위키 읽기 전용, `prompts/kakao_judge.md`)가 다시 보고 캘린더에 넣을 일정을 고른다.
+   고르면 `source=kakao` 이벤트(kept)와 `calendar_items` 를 만들고 add 는 바로 네이버 캘린더에 넣는다. Buzz 봇이 일정 알림을 보낸다.
+   `claude 판단` 열은 `claude-add #이벤트번호`(ask 만 있으면 `claude-ask`), 고를 일정이 없으면 오탐으로 보고 `claude-deny`.
+`KAKAO_JUDGE_ENABLED=false` 면 방 단위 판단을 끄고 예전처럼 알림 하나씩 판별한다.
 
 ```bash
-KAKAOCLI_USER_ID=<내 카카오 userId> INGEST_URL=https://<서버> python3 tools/kakao_sync.py --days 30 [--dry-run]
+KAKAOCLI_USER_ID=<내 카카오 userId> INGEST_URL=https://<서버> python3 tools/kakao_sync.py [--days N] [--dry-run]
+tools/install_kakao_sync.sh <내 카카오 userId> https://<서버> [interval초=60]   # launchd 1분 주기 등록
 ```
+주기 실행은 launchd(`com.auto_mobile.kakao_sync`)가 1분마다 돌린다. 로그는 `~/Library/Logs/kakao_sync.log`.
+보낼 때마다 마지막 전송 시각을 `~/Library/Application Support/auto_mobile/kakao_sync.json` 에 적고, 다음에는 그 5분 전 이후에
+보낸 메시지만 보낸다(맥 DB 에 늦게 들어오는 메시지를 덮는 여유. 중복은 서버가 거른다). 맥을 꺼 뒀다 켜도 그동안의 메시지를 알아서 채운다.
+상태 파일이 없으면 최근 2일치, `--days N` 이면 상태와 관계없이 N일치를 보낸다.
+처음 등록하면 macOS 가 python 의 다른 앱 데이터 접근을 물으므로 허용한다. 다시 묻는 일을 없애려면 kakaocli 와 python 에 전체 디스크 접근 권한을 준다.
+맥 카톡이 로그인돼 있는 동안 폰 카톡 알림은 `quiet_new_message` 로 와서 폰 플로우가 보내지 않는다. 맥이 꺼져 있을 때만 폰이 보낸다.
 payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단톡 여부), `text`, `time`, `chat_log_id`, `context`(같은 보낸 사람의 앞 메시지 5건)다.
 
 판별 내역(`/v1/verdicts/*`)은 최신순으로 `{"items": [...], "next_before_id"}` 를 돌려준다.
-`status` 는 `pending|processing|kept|discarded|failed`, 다음 페이지는 `?before_id=<next_before_id>`.
+`status` 는 `pending|processing|kept|discarded|filed|failed`, 다음 페이지는 `?before_id=<next_before_id>`.
 메일 항목에는 파싱한 본문(`text`)과 첨부 목록(`attachments`)이 들어 있다.
 음성 전사(`/v1/transcriptions`)는 faster-whisper large-v3-turbo(`WHISPER_MODEL_DIR`, 기본 `~/whisper/large-v3-turbo`)로
 `input_path` 의 음성을 `output_dir`(기본 `transcripts`) 아래 `{파일명}.txt` 와 `{파일명}.json`(구간별 시각) 으로 저장한다.
@@ -103,7 +121,7 @@ Caddy 를 거친 요청(X-Forwarded-For 가 붙은 요청)에는 404 를 준다.
 | 파일 | 대상 |
 |---|---|
 | `prompts/message.toml` | SMS/MMS |
-| `prompts/kakao.toml` | 카카오톡 |
+| `prompts/kakao.toml` | 카카오톡 (방 단위 판단의 Jev 질문. Claude 단계는 `prompts/kakao_judge.md`) |
 | `prompts/email.toml` | 메일 |
 | `prompts/call.toml` | 통화녹음 전사 |
 
@@ -268,6 +286,7 @@ data/
     kakao/YYYYMMDD/{chatLogId}.json          폰 알림으로 받은 카톡 1건
     kakao/rooms.json                         맥에서 받은 방 목록: chat_id → kind, name, file, members(단톡 참여자)
     kakao/personal/{상대 이름}.csv            1:1 방 대화 기록. 이름이 겹치면 {상대 이름}_{chat_id}.csv
+                                             열: 일시, 사용자명, 톡 내용, log_id, jev 판단, claude 판단
     kakao/group/{chat_id}.csv                단톡방 대화 기록
     kakao/group/unassigned.csv               폰 알림 단톡 중 보낸 사람이 참여한 방을 모르는 것
   transcripts/            전사 결과 기본 위치 (output_dir 로 바꿀 수 있음)
@@ -296,4 +315,5 @@ prompts/                판별 프롬프트 (이벤트 종류별 .toml), 위키 
   jobs/wiki_builder.py  LLM 위키 빌더
 tests/
 tools/kakao_sync.py     맥 카카오톡 대화 기록을 서버로 보낸다 (맥에서만 실행)
+tools/install_kakao_sync.sh  kakao_sync.py 를 맥 launchd 에 1분 주기로 등록
 ```

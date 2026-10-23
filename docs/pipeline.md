@@ -33,10 +33,11 @@ sequenceDiagram
         A-->>C: 묶음 요약 알림이나 다른 채널은 200 {ignored: true}
     end
 
-    opt 카카오톡 대화 기록 (맥에서 수동 실행)
-        X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음<br/>1:1 방·단톡방만, 최근 N일(기본 30)
+    opt 카카오톡 대화 기록 (맥 launchd 1분마다. 맥 카톡이 켜져 있으면 폰 알림은 quiet 채널이라 이쪽만 들어옴)
+        X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음. 1:1 방·단톡방만<br/>마지막 전송 시각(맥 상태 파일) 5분 전 이후에 보낸 메시지. 처음이면 2일치, --days N 이면 N일치
         X->>A: POST /v1/ingest/kakao/history {rooms, messages}
-        A->>S: data/raw/kakao/rooms.json(방 목록·단톡 참여자),<br/>personal/{상대 이름}.csv, group/{chat_id}.csv 에 log_id 로 중복 거르고 log_id 순으로 저장<br/>events 행은 만들지 않음 (판별 대상 아님)<br/>폰 알림으로 먼저 들어간 행(log_id ±512)은 맥의 정확한 log_id 행으로 바꿈
+        A->>S: data/raw/kakao/rooms.json(방 목록·단톡 참여자),<br/>personal/{상대 이름}.csv, group/{chat_id}.csv 에 log_id 로 중복 거르고 log_id 순으로 저장<br/>새 메시지가 들어간 방은 rooms.json 에 판단 대기(unjudged_since, last_added)로 표시<br/>폰 알림으로 먼저 들어간 행(log_id ±512)은 맥의 정확한 log_id 행으로 바꿈
+        A-->>X: 200 → 맥 상태 파일에 이번 전송 시각 기록 (실패하면 기록하지 않아 다음에 다시 보냄)
     end
 
     opt MMS 첨부 (2026-10-21부터 폰 플로우가 보내지 않음)
@@ -66,6 +67,7 @@ sequenceDiagram
             W->>S: 방 CSV 에 1행 추가. 1:1 은 보낸 사람 이름의 personal 방(없으면 임시 방 name:{이름})<br/>단톡은 보낸 사람이 참여한 단톡방(rooms.json), 없으면 group/unassigned.csv
             W->>J: 참여한 단톡방이 2곳 이상일 때만: 후보 방마다 최근 대화 8건을 선택지로 주고 어느 방인지 질문
             J-->>W: 방별 확률 → 가장 높은 방. 고른 방은 verdict.kakao_room 에 남김
+            W->>S: 방을 찾았으면 status=filed, 방 판단 대기로 표시하고 끝 (판단은 아래 방 단위 판단이 함)<br/>방을 모르면(unassigned) 이 메시지만 아래처럼 판별
         end
         W->>W: 판별용 텍스트 만들기 (render.py)<br/>통화는 파일명 + 수신/발신·상대 + 전사문
         alt 판별할 텍스트 없음 (전사 실패한 통화, 이미지만 있는 MMS)
@@ -78,6 +80,29 @@ sequenceDiagram
         end
     end
     Note over W,J: Jev 호출이 실패하면 pending으로 되돌려 재시도하고<br/>5회를 넘기면 failed로 둔다
+
+    Note over S,G: 2-1. 카카오톡 방 단위 판단: 워커의 kakao-judge 스레드 (15초마다, app/services/kakao_judge.py)
+    loop KAKAO_JUDGE_POLL_SECONDS
+        W->>S: 판단 대기 방 중 대화가 70초 멈췄거나(SETTLE) 첫 새 메시지 뒤 5분 지난(MAX_WAIT) 방
+        W->>W: 방 CSV 의 최근 20건(WINDOW). 판단 열이 빈 12시간 안의 메시지에 ▶ (새 메시지), 나머지는 맥락<br/>새 메시지가 20건보다 많으면 20건씩 나눔
+        W->>J: 대화 창 + prompts/kakao.toml (▶ 메시지에 챙길 일이 있는가)
+        J-->>W: useful 확률
+        alt threshold 미만
+            W->>S: 새 메시지의 jev 판단 열에 "noise 0.12"
+        else useful
+            W->>L: 같은 대화 창 + prompts/kakao_judge.md + 이미 잡힌 캘린더 후보<br/>(claude -p, 위키 읽기 전용, 규칙 prompts/wiki.md)
+            L-->>W: {decision: calendar | deny, reason, calendar[]}
+            alt calendar
+                W->>S: events 행 (source=kakao, status=kept, 알림 끝으로 표시) → 위키 빌더가 위키에 넣음<br/>calendar_items 추가
+                W->>G: decision=add 는 바로 등록 (실패하면 위키 빌더가 다시)
+                W->>S: 판단 열: "useful 0.85", "claude-add #이벤트번호" (ask 만 있으면 claude-ask)
+            else deny (오탐)
+                W->>S: 판단 열: "useful 0.85", "claude-deny"
+            end
+        end
+        W->>S: 방의 판단 대기 해제. 실패하면 5분 뒤 다시 (RETRY)
+    end
+    B->>U: 등록한 일정은 calendar_items 알림으로 알리고, ask 는 "넣을까요?"
 
     Note over S,U: 3. 알림과 명령: Buzz 봇 (5초마다)
     loop BUZZ_POLL_SECONDS
@@ -132,4 +157,5 @@ sequenceDiagram
 | `processing` | 워커가 판별 중 |
 | `kept` | 쓸모 있음. Buzz 알림과 LLM 위키로 넘어간다 |
 | `discarded` | 노이즈. 여기서 끝 |
+| `filed` | 방을 찾은 카톡 알림. 방 CSV 에 넣었고 판단은 방 단위로 한다 |
 | `failed` | 재시도를 다 써도 실패. 사람이 확인해야 함 |

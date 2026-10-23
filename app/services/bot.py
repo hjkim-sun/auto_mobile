@@ -55,6 +55,8 @@ def summary_line(event: sqlite3.Row) -> str:
     label = LABELS.get(event["source"], event["source"])
     if event["source"] == "message":
         what = f"{p.get('from')}: {(p.get('text') or '(첨부)').splitlines()[0][:60]}"
+    elif event["source"] == "kakao" and p.get("log_ids"):   # 방 단위 판단(kakao_judge)이 만든 이벤트
+        what = f"{p.get('room')}: {p['claude']['reason'][:60]}"
     elif event["source"] == "kakao":
         what = f"{p.get('sender')}: {((p.get('text') or '').splitlines() or [''])[0][:60]}"
     elif event["source"] == "email":

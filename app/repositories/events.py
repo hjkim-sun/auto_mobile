@@ -3,6 +3,7 @@
 status 흐름
   pending → processing → kept       (쓸모 있음, 다음 단계 대상)
                        → discarded  (쓸모 없음, 종료)
+                       → filed      (방을 찾은 카톡 알림. 방 CSV 에 넣고 판단은 kakao_judge 가 방 단위로 한다)
                        → pending    (실패 후 재시도 대기)
                        → failed     (재시도 횟수 초과)
 """
