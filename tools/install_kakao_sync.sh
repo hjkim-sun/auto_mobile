@@ -10,6 +10,10 @@ LABEL=com.auto_mobile.kakao_sync
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="$(command -v python3)"
+# python.org 설치본이면 Python.app 실행 파일로 돌린다. 카톡 DB 접근 권한(전체 디스크 접근)을 Python.app 에 주면 되고,
+# bin/python3.12 는 설정의 파일 선택 창에서 고를 수 없어 매번 "다른 앱의 데이터에 접근" 창이 뜬다
+APP="$(dirname "$(readlink -f "$PYTHON")")/../Resources/Python.app/Contents/MacOS/Python"
+[ -x "$APP" ] && PYTHON="$(cd "$(dirname "$APP")" && pwd)/Python"
 KAKAOCLI="${KAKAOCLI:-$HOME/.local/bin/kakaocli}"
 cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
