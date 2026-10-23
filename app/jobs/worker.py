@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import time
 
 from app.core.config import get_settings
 from app.db.session import init_db
 from app.repositories import events
+from app.services import kakao_history
 from app.services.classify import classify_event
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,12 @@ def run(once: bool = False) -> None:
             time.sleep(settings.worker_poll_seconds)
             continue
         try:
+            # 폰 카톡 알림은 판별 전에 방 CSV 에 넣는다. 단톡 방을 Jev 가 골랐으면 그 결과도 verdict 에 남긴다
+            room = (kakao_history.file_notification(json.loads(event["payload"]))
+                    if event["source"] == "kakao" else None)
             status, verdict = classify_event(event)
+            if room:
+                verdict["kakao_room"] = room
         except Exception as e:
             logger.exception("event %d failed (attempt %d)", event["id"], event["attempts"])
             if event["attempts"] >= settings.worker_max_attempts:

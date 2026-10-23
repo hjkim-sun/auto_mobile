@@ -66,6 +66,11 @@ payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위
 `{"rooms", "added", "duplicates", "unknown_room"}` 이다. 판별(events)에는 넣지 않는다.
 `log_id` 는 폰 알림의 `chatLogId` 와 같은 값이다(Automate 를 거치면 double 이라 끝자리가 ±256 안에서 달라진다).
 
+폰 알림으로 받은 카톡도 워커가 판별 전에 같은 CSV 에 넣는다(`kakao_history.file_notification`).
+1:1 은 보낸 사람 이름의 personal 방에, 단톡은 `rooms.json` 에서 보낸 사람이 참여한 단톡방에 넣는다.
+참여한 단톡방이 여럿이면 Jev 가 후보 방들의 최근 대화를 보고 고르고, 하나도 없으면 `group/unassigned.csv` 에 둔다.
+고른 방은 이벤트 verdict 의 `kakao_room` 에 남는다. 나중에 맥에서 같은 메시지(log_id ±512)가 오면 맥의 정확한 log_id 로 바꾼다.
+
 ```bash
 KAKAOCLI_USER_ID=<내 카카오 userId> INGEST_URL=https://<서버> python3 tools/kakao_sync.py --days 30 [--dry-run]
 ```
@@ -260,6 +265,7 @@ data/
     kakao/rooms.json                         맥에서 받은 방 목록: chat_id → kind, name, file, members(단톡 참여자)
     kakao/personal/{상대 이름}.csv            1:1 방 대화 기록. 이름이 겹치면 {상대 이름}_{chat_id}.csv
     kakao/group/{chat_id}.csv                단톡방 대화 기록
+    kakao/group/unassigned.csv               폰 알림 단톡 중 보낸 사람이 참여한 방을 모르는 것
   transcripts/            전사 결과 기본 위치 (output_dir 로 바꿀 수 있음)
     calls/YYYYMMDD/{sha256 앞 12자}_{파일명}.txt|.json   수신한 통화녹음의 자동 전사 결과. 날짜 폴더는 원본과 같다
 ```

@@ -36,7 +36,7 @@ sequenceDiagram
     opt 카카오톡 대화 기록 (맥에서 수동 실행)
         X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음<br/>1:1 방·단톡방만, 최근 N일(기본 30)
         X->>A: POST /v1/ingest/kakao/history {rooms, messages}
-        A->>S: data/raw/kakao/rooms.json(방 목록·단톡 참여자),<br/>personal/{상대 이름}.csv, group/{chat_id}.csv 에 log_id 로 중복 거르고 log_id 순으로 저장<br/>events 행은 만들지 않음 (판별 대상 아님)
+        A->>S: data/raw/kakao/rooms.json(방 목록·단톡 참여자),<br/>personal/{상대 이름}.csv, group/{chat_id}.csv 에 log_id 로 중복 거르고 log_id 순으로 저장<br/>events 행은 만들지 않음 (판별 대상 아님)<br/>폰 알림으로 먼저 들어간 행(log_id ±512)은 맥의 정확한 log_id 행으로 바꿈
     end
 
     opt MMS 첨부 (2026-10-21부터 폰 플로우가 보내지 않음)
@@ -62,6 +62,11 @@ sequenceDiagram
     Note over S,J: 2. 판별: 워커가 큐에서 하나씩 꺼낸다
     loop 3초마다
         W->>S: pending이고 available_at이 지난 이벤트 1건 꺼냄 (status=processing)<br/>전사 중인 통화(transcribing)는 꺼내지 않음
+        opt 카카오톡 알림 이벤트 (kakao_history.file_notification)
+            W->>S: 방 CSV 에 1행 추가. 1:1 은 보낸 사람 이름의 personal 방(없으면 임시 방 name:{이름})<br/>단톡은 보낸 사람이 참여한 단톡방(rooms.json), 없으면 group/unassigned.csv
+            W->>J: 참여한 단톡방이 2곳 이상일 때만: 후보 방마다 최근 대화 8건을 선택지로 주고 어느 방인지 질문
+            J-->>W: 방별 확률 → 가장 높은 방. 고른 방은 verdict.kakao_room 에 남김
+        end
         W->>W: 판별용 텍스트 만들기 (render.py)<br/>통화는 파일명 + 수신/발신·상대 + 전사문
         alt 판별할 텍스트 없음 (전사 실패한 통화, 이미지만 있는 MMS)
             W->>S: status=kept (놓치지 않게 일단 남김)
