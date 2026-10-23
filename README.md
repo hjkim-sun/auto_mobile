@@ -72,8 +72,12 @@ payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위
 고른 방은 이벤트 verdict 의 `kakao_room` 에 남는다. 나중에 맥에서 같은 메시지(log_id ±512)가 오면 맥의 정확한 log_id 로 바꾼다.
 
 ```bash
-KAKAOCLI_USER_ID=<내 카카오 userId> INGEST_URL=https://<서버> python3 tools/kakao_sync.py --days 30 [--dry-run]
+KAKAOCLI_USER_ID=<내 카카오 userId> INGEST_URL=https://<서버> python3 tools/kakao_sync.py [--days 2] [--dry-run]
+tools/install_kakao_sync.sh <내 카카오 userId> https://<서버> [days=2] [interval초=60]   # launchd 1분 주기 등록
 ```
+주기 실행은 launchd(`com.auto_mobile.kakao_sync`)가 1분마다 최근 2일치를 보낸다. 로그는 `~/Library/Logs/kakao_sync.log`.
+맥을 2일보다 오래 꺼 뒀으면 켠 뒤 `--days` 를 늘려 한 번 직접 돌린다. 처음 등록하면 macOS 가 python 의 다른 앱 데이터 접근을 물으므로 허용한다.
+맥 카톡이 로그인돼 있는 동안 폰 카톡 알림은 `quiet_new_message` 로 와서 폰 플로우가 보내지 않는다. 맥이 꺼져 있을 때만 폰이 보낸다.
 payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단톡 여부), `text`, `time`, `chat_log_id`, `context`(같은 보낸 사람의 앞 메시지 5건)다.
 
 판별 내역(`/v1/verdicts/*`)은 최신순으로 `{"items": [...], "next_before_id"}` 를 돌려준다.
@@ -292,4 +296,5 @@ prompts/                판별 프롬프트 (이벤트 종류별 .toml), 위키 
   jobs/wiki_builder.py  LLM 위키 빌더
 tests/
 tools/kakao_sync.py     맥 카카오톡 대화 기록을 서버로 보낸다 (맥에서만 실행)
+tools/install_kakao_sync.sh  kakao_sync.py 를 맥 launchd 에 1분 주기로 등록
 ```

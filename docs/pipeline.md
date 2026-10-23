@@ -33,8 +33,8 @@ sequenceDiagram
         A-->>C: 묶음 요약 알림이나 다른 채널은 200 {ignored: true}
     end
 
-    opt 카카오톡 대화 기록 (맥에서 수동 실행)
-        X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음<br/>1:1 방·단톡방만, 최근 N일(기본 30)
+    opt 카카오톡 대화 기록 (맥 launchd 1분마다. 맥 카톡이 켜져 있으면 폰 알림은 quiet 채널이라 이쪽만 들어옴)
+        X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음<br/>1:1 방·단톡방만, 최근 N일(기본 2, --days)
         X->>A: POST /v1/ingest/kakao/history {rooms, messages}
         A->>S: data/raw/kakao/rooms.json(방 목록·단톡 참여자),<br/>personal/{상대 이름}.csv, group/{chat_id}.csv 에 log_id 로 중복 거르고 log_id 순으로 저장<br/>events 행은 만들지 않음 (판별 대상 아님)<br/>폰 알림으로 먼저 들어간 행(log_id ±512)은 맥의 정확한 log_id 행으로 바꿈
     end

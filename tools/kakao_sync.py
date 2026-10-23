@@ -11,7 +11,8 @@
   INGEST_TOKEN       없으면 저장소 .env 의 INGEST_TOKEN
   KAKAOCLI           kakaocli 경로 (기본 kakaocli)
 
-실행: python3 tools/kakao_sync.py [--days 30] [--dry-run]
+실행: python3 tools/kakao_sync.py [--days 2] [--dry-run]
+주기 실행(1분)은 tools/install_kakao_sync.sh 로 launchd 에 등록한다. 맥을 오래 꺼 뒀으면 --days 를 늘려 한 번 돌린다.
 """
 from __future__ import annotations
 
@@ -82,7 +83,7 @@ def collect(days: int, me: int) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--days", type=int, default=30)
+    ap.add_argument("--days", type=int, default=2, help="최근 며칠치를 보낼지. 맥을 오래 꺼 뒀으면 늘린다")
     ap.add_argument("--dry-run", action="store_true", help="보내지 않고 건수만 본다")
     args = ap.parse_args()
     me = int(os.environ["KAKAOCLI_USER_ID"])
