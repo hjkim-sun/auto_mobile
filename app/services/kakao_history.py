@@ -7,21 +7,47 @@ data/raw/kakao/
 
 CSV 열은 일시, 사용자명, 톡 내용, log_id 이다. log_id 는 카카오 서버가 매긴 메시지 ID 로, 폰 알림의
 chatLogId 와 같은 값이고 시간 순으로 커진다. 같은 log_id 는 한 번만 넣고, 파일은 log_id 순으로 다시 쓴다.
+
+폰 알림(POST /v1/ingest/kakao)으로 온 메시지도 워커가 판별 전에 file_notification 으로 같은 CSV 에 넣는다.
+- 1:1 방 알림은 보낸 사람 이름의 personal 방에 넣는다. 맥에서 아직 받지 못한 방이면 "name:{이름}" 으로 임시 등록한다.
+- 단톡 알림은 보낸 사람이 참여한 단톡방(rooms.json members)에 넣는다. 후보가 여럿일 때만 Jev 가 각 방의 최근
+  대화를 보고 고른다. 후보가 없으면 group/unassigned.csv 에 둔다.
+- 알림의 chatLogId 는 Automate 가 double 로 넘겨 ±256 안에서 어긋난다. 연속한 두 메시지의 log_id 는 수천 이상
+  차이 나므로, 512 안쪽이면 같은 메시지로 보고 512 의 배수가 아닌 값(맥이 준 정확한 값)을 남긴다.
 """
 from __future__ import annotations
 
+import bisect
 import csv
+import fcntl
 import json
-import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 from app.core.config import get_settings
 from app.schemas.ingest import KakaoHistory
+from app.services import jev
 from app.services.ingest import safe_name
 
 COLUMNS = ["일시", "사용자명", "톡 내용", "log_id"]
-_lock = threading.Lock()   # 같은 CSV 를 두 요청이 동시에 다시 쓰지 않게
+UNASSIGNED = "group/unassigned.csv"
+LOG_ID_SLACK = 512    # 폰 chatLogId 오차(±256)를 넉넉히 덮는 폭
+ROOM_CONTEXT = 8      # Jev 에 보여 줄 후보 방마다의 최근 메시지 수
+
+
+@contextmanager
+def _locked() -> Iterator[None]:
+    """API(맥 기록)와 워커(폰 알림)가 다른 프로세스라 파일 잠금으로 rooms.json 과 CSV 를 지킨다."""
+    path = kakao_dir() / ".lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def kakao_dir() -> Path:
@@ -31,6 +57,12 @@ def kakao_dir() -> Path:
 def load_rooms() -> dict[str, dict]:
     path = kakao_dir() / "rooms.json"
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def _save_rooms(rooms: dict[str, dict]) -> None:
+    path = kakao_dir() / "rooms.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rooms, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _room_file(rooms: dict[str, dict], chat_id: str, kind: str, name: str) -> str:
@@ -43,38 +75,53 @@ def _room_file(rooms: dict[str, dict], chat_id: str, kind: str, name: str) -> st
     return file
 
 
+def read_rows(path: Path) -> list[list[str]]:
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8", newline="") as f:
+        return list(csv.reader(f))[1:]
+
+
 def _merge(path: Path, rows: list[list[str]]) -> int:
-    """rows 중 path 에 없는 log_id 만 더하고 더한 수를 돌려준다."""
-    existing: dict[str, list[str]] = {}
-    if path.exists():
-        with path.open(encoding="utf-8", newline="") as f:
-            existing = {r[3]: r for r in list(csv.reader(f))[1:]}
-    new = {r[3]: r for r in rows if r[3] not in existing}
-    if not new:
-        return 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with tmp.open("w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(COLUMNS)
-        w.writerows(sorted({**existing, **new}.values(), key=lambda r: int(r[3])))
-    tmp.replace(path)
-    return len(new)
+    """rows 중 path 에 없는 메시지만 더하고 더한 수를 돌려준다. 같은 메시지는 log_id 가 512 안쪽인 것이다."""
+    existing = sorted(read_rows(path), key=lambda r: int(r[3]))
+    ids = [int(r[3]) for r in existing]
+    added = changed = 0
+    for row in rows:
+        log_id = int(row[3])
+        i = bisect.bisect_left(ids, log_id - LOG_ID_SLACK)
+        if i < len(ids) and ids[i] <= log_id + LOG_ID_SLACK:
+            # 폰 알림 값(512 의 배수)이 먼저 들어가 있으면 맥이 준 정확한 행으로 바꾼다
+            if ids[i] != log_id and ids[i] % LOG_ID_SLACK == 0 and log_id % LOG_ID_SLACK:
+                existing[i], ids[i] = row, log_id
+                changed += 1
+            continue
+        existing.insert(i, row)
+        ids.insert(i, log_id)
+        added += 1
+    if added or changed:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(COLUMNS)
+            w.writerows(existing)
+        tmp.replace(path)
+    return added
 
 
 def save_history(history: KakaoHistory) -> dict[str, int]:
     tz = get_settings().tz
-    with _lock:
+    with _locked():
         rooms = load_rooms()
         for room in history.rooms:
             cid = str(room.chat_id)
-            old = rooms.get(cid, {})
+            # 폰 알림으로 먼저 만든 임시 1:1 방이 있으면 그 파일을 이어 쓴다
+            old = rooms.get(cid) or (rooms.pop(f"name:{room.name}", None) if room.kind == "personal" else None) or {}
             rooms[cid] = {"kind": room.kind, "name": room.name,
                           "file": old.get("file") or _room_file(rooms, cid, room.kind, room.name),
                           "members": sorted(set(old.get("members", [])) | set(room.members))}
-        path = kakao_dir() / "rooms.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(rooms, ensure_ascii=False, indent=2), encoding="utf-8")
+        _save_rooms(rooms)
 
         by_file: dict[str, list[list[str]]] = {}
         unknown = 0
@@ -90,6 +137,55 @@ def save_history(history: KakaoHistory) -> dict[str, int]:
             "duplicates": len(history.messages) - unknown - added, "unknown_room": unknown}
 
 
-def groups_of(name: str) -> list[str]:
+def groups_of(name: str, rooms: dict[str, dict] | None = None) -> list[str]:
     """name 이 참여한 단톡방 chat_id 목록. 폰 알림의 단톡 메시지가 어느 방 것인지 고를 때 쓴다."""
-    return [cid for cid, r in load_rooms().items() if r["kind"] == "group" and name in r["members"]]
+    rooms = load_rooms() if rooms is None else rooms
+    return [cid for cid, r in rooms.items() if r["kind"] == "group" and name in r["members"]]
+
+
+def choose_room(msg: dict, candidates: dict[str, dict]) -> tuple[str, dict[str, float]]:
+    """단톡 알림 msg 가 candidates(chat_id → 방) 중 어느 방 것인지 Jev 에 묻는다. (chat_id, 방별 확률)"""
+    criteria = {}
+    for cid, room in candidates.items():
+        recent = read_rows(kakao_dir() / room["file"])[-ROOM_CONTEXT:]
+        lines = [f"방 이름: {room['name']}", f"참여자: {', '.join(room['members'])}", "최근 대화:"]
+        lines += [f"{r[0]} {r[1]}: {r[2]}" for r in recent] or ["(없음)"]
+        criteria[f"room_{cid}"] = "\n".join(lines)
+    state = "\n".join([f"보낸 사람: {msg['sender']}", f"시각: {msg.get('date_text')}", "", "메시지:", msg["text"]])
+    question = {"type": "choice", "criteria": criteria,
+                "instructions": "이 카카오톡 단톡 메시지는 어느 단톡방에서 온 것인가? 각 방의 최근 대화와 "
+                                "주제·시각이 이어지는 방을 고른다."}
+    probs = jev.classify(state, {"room": question})["answers"]["room"]["probabilities"]
+    probs = {k.removeprefix("room_"): v for k, v in probs.items()}
+    return max(probs, key=probs.get), probs
+
+
+def file_notification(msg: dict, choose: Callable = choose_room) -> dict | None:
+    """폰 알림 메시지(이벤트 payload)를 방 CSV 에 넣고 고른 방을 돌려준다. chatLogId 가 없으면 넣지 않는다."""
+    if msg.get("chat_log_id") is None or not msg.get("text"):
+        return None
+    sender = msg["sender"]
+    when = msg.get("date_text") or datetime.now(get_settings().tz).strftime("%Y-%m-%d %H:%M:%S")
+    with _locked():
+        rooms = load_rooms()
+        result: dict = {}
+        if msg.get("group"):
+            candidates = {cid: rooms[cid] for cid in groups_of(sender, rooms)}
+            if len(candidates) == 1:
+                result = {"chat_id": next(iter(candidates)), "by": "only_group"}
+            elif candidates:
+                cid, probs = choose(msg, candidates)
+                result = {"chat_id": cid, "by": "jev", "probabilities": probs}
+            else:
+                result = {"chat_id": None, "by": "unassigned"}
+        else:
+            cid = next((c for c, r in rooms.items() if r["kind"] == "personal" and r["name"] == sender), None)
+            if cid is None:   # 맥에서 아직 받지 못한 1:1 방
+                cid = f"name:{sender}"
+                rooms[cid] = {"kind": "personal", "name": sender,
+                              "file": _room_file(rooms, cid, "personal", sender), "members": []}
+                _save_rooms(rooms)
+            result = {"chat_id": cid, "by": "personal"}
+        result["file"] = rooms[result["chat_id"]]["file"] if result["chat_id"] else UNASSIGNED
+        _merge(kakao_dir() / result["file"], [[when, sender, msg["text"], str(msg["chat_log_id"])]])
+    return result
