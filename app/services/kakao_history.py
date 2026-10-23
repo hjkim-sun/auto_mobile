@@ -10,7 +10,7 @@ CSV 열은 일시, 사용자명, 톡 내용, log_id, jev 판단, claude 판단 �
 판단 두 열은 방 단위 판단(app/services/kakao_judge.py)이 채운다. 비어 있으면 아직 판단하지 않은 메시지다.
 
 새 메시지가 들어간 방은 rooms.json 에 unjudged_since(처음 들어온 시각)와 last_added(마지막으로 들어온 시각)를
-적어 판단 대기로 둔다. 판단이 끝나면 mark_judged 가 지운다.
+적어 판단 대기로 둔다. 폰 알림으로 들어왔으면 phone 도 적어 더 짧게 기다린다. 판단이 끝나면 mark_judged 가 지운다.
 
 폰 알림(POST /v1/ingest/kakao)으로 온 메시지도 워커가 판별 전에 file_notification 으로 같은 CSV 에 넣는다.
 - 1:1 방 알림은 보낸 사람 이름의 personal 방에 넣는다. 맥에서 아직 받지 못한 방이면 "name:{이름}" 으로 임시 등록한다.
@@ -122,10 +122,12 @@ def _merge(path: Path, rows: list[list[str]]) -> int:
     return added
 
 
-def _flag(room: dict, now: float) -> None:
+def _flag(room: dict, now: float, phone: bool = False) -> None:
     """새 메시지가 들어간 방을 판단 대기로 둔다."""
     room.setdefault("unjudged_since", now)
     room["last_added"] = now
+    if phone:
+        room["phone"] = True
 
 
 def save_history(history: KakaoHistory) -> dict[str, int]:
@@ -136,7 +138,8 @@ def save_history(history: KakaoHistory) -> dict[str, int]:
             cid = str(room.chat_id)
             # 폰 알림으로 먼저 만든 임시 1:1 방이 있으면 그 파일을 이어 쓴다
             old = rooms.get(cid) or (rooms.pop(f"name:{room.name}", None) if room.kind == "personal" else None) or {}
-            rooms[cid] = {"kind": room.kind, "name": room.name,
+            # 판단 대기 표시(unjudged_since 등)는 남긴다. 맥은 1분마다 모든 방을 다시 보낸다
+            rooms[cid] = {**old, "kind": room.kind, "name": room.name,
                           "file": old.get("file") or _room_file(rooms, cid, room.kind, room.name),
                           "members": sorted(set(old.get("members", [])) | set(room.members))}
 
@@ -210,17 +213,19 @@ def file_notification(msg: dict, choose: Callable = choose_room) -> dict | None:
         result["file"] = rooms[result["chat_id"]]["file"] if result["chat_id"] else UNASSIGNED
         if _merge(kakao_dir() / result["file"], [[when, sender, msg["text"], str(msg["chat_log_id"])]]) \
                 and result["chat_id"]:
-            _flag(rooms[result["chat_id"]], time.time())
+            _flag(rooms[result["chat_id"]], time.time(), phone=True)
             _save_rooms(rooms)
     return result
 
 
-def due_rooms(now: float, settle: float, max_wait: float) -> dict[str, dict]:
-    """판단할 때가 된 방. 대화가 settle 초 동안 멈췄거나, 첫 새 메시지 뒤 max_wait 초가 지난 방."""
+def due_rooms(now: float, settle: float, phone_settle: float, max_wait: float) -> dict[str, dict]:
+    """판단할 때가 된 방. 대화가 settle 초(폰 알림이 들어온 방은 phone_settle 초) 동안 멈췄거나,
+    첫 새 메시지 뒤 max_wait 초가 지난 방."""
     with _locked():
         rooms = load_rooms()
     return {cid: r for cid, r in rooms.items() if "unjudged_since" in r and now >= r.get("retry_at", 0)
-            and (now - r["last_added"] >= settle or now - r["unjudged_since"] >= max_wait)}
+            and (now - r["last_added"] >= (phone_settle if r.get("phone") else settle)
+                 or now - r["unjudged_since"] >= max_wait)}
 
 
 def mark_judged(chat_id: str, started: float, marks: dict[str, tuple[str, str]],
@@ -244,7 +249,7 @@ def mark_judged(chat_id: str, started: float, marks: dict[str, tuple[str, str]],
         if retry_at is not None:
             room["retry_at"] = retry_at
         elif room.get("last_added", 0) <= started:
-            for key in ("unjudged_since", "last_added", "retry_at"):
+            for key in ("unjudged_since", "last_added", "retry_at", "phone"):
                 room.pop(key, None)
         else:   # 판단하는 사이 들어온 메시지는 다음 판단에 넘긴다
             room["unjudged_since"] = started

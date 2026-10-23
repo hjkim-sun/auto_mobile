@@ -1,8 +1,9 @@
 """카카오톡 방 단위 판단. 새 메시지가 들어온 방의 최근 대화를 묶어 Jev → Claude 순으로 본다.
 
 메시지마다 묻지 않는다. 메시지마다 최근 대화를 묶어 던지면 창이 거의 겹쳐 같은 판단이 연달아 나오기 때문이다.
-1. 방에 새 메시지가 들어가면 kakao_history 가 그 방을 판단 대기로 둔다. 대화가 KAKAO_JUDGE_SETTLE_SECONDS 동안
-   멈추거나, 첫 새 메시지 뒤 KAKAO_JUDGE_MAX_WAIT_SECONDS 가 지나면 판단한다.
+1. 방에 새 메시지가 들어가면 kakao_history 가 그 방을 판단 대기로 둔다. 대화가 KAKAO_JUDGE_SETTLE_SECONDS
+   (폰 알림이 들어온 방은 실시간이라 KAKAO_JUDGE_PHONE_SETTLE_SECONDS) 동안 멈추거나,
+   첫 새 메시지 뒤 KAKAO_JUDGE_MAX_WAIT_SECONDS 가 지나면 판단한다.
 2. Jev: 방의 최근 KAKAO_JUDGE_WINDOW 건을 주고, ▶ 를 붙인 새 메시지에 챙길 일이 있는지 묻는다 (prompts/kakao.toml).
    앞 메시지는 맥락으로만 본다. noise 면 새 메시지의 jev 판단 열에 "noise 0.12" 를 적고 끝낸다.
 3. Claude: Jev 가 useful 이면 claude -p 가 같은 대화를 위키와 함께 다시 본다 (prompts/kakao_judge.md).
@@ -140,7 +141,7 @@ def run_due() -> int:
     s = get_settings()
     now = time.time()
     done = 0
-    for chat_id, room in kakao_history.due_rooms(now, s.kakao_judge_settle_seconds,
+    for chat_id, room in kakao_history.due_rooms(now, s.kakao_judge_settle_seconds, s.kakao_judge_phone_settle_seconds,
                                                  s.kakao_judge_max_wait_seconds).items():
         started = time.time()
         marks: dict[str, tuple[str, str]] = {}

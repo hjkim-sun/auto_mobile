@@ -67,7 +67,7 @@ sequenceDiagram
             W->>S: 방 CSV 에 1행 추가. 1:1 은 보낸 사람 이름의 personal 방(없으면 임시 방 name:{이름})<br/>단톡은 보낸 사람이 참여한 단톡방(rooms.json), 없으면 group/unassigned.csv
             W->>J: 참여한 단톡방이 2곳 이상일 때만: 후보 방마다 최근 대화 8건을 선택지로 주고 어느 방인지 질문
             J-->>W: 방별 확률 → 가장 높은 방. 고른 방은 verdict.kakao_room 에 남김
-            W->>S: 방을 찾았으면 status=filed, 방 판단 대기로 표시하고 끝 (판단은 아래 방 단위 판단이 함)<br/>방을 모르면(unassigned) 이 메시지만 아래처럼 판별
+            W->>S: 방을 찾았으면 status=filed, 방 판단 대기(phone)로 표시하고 끝 (판단은 아래 방 단위 판단이 함)<br/>방을 모르면(unassigned) 이 메시지만 아래처럼 판별
         end
         W->>W: 판별용 텍스트 만들기 (render.py)<br/>통화는 파일명 + 수신/발신·상대 + 전사문
         alt 판별할 텍스트 없음 (전사 실패한 통화, 이미지만 있는 MMS)
@@ -81,9 +81,9 @@ sequenceDiagram
     end
     Note over W,J: Jev 호출이 실패하면 pending으로 되돌려 재시도하고<br/>5회를 넘기면 failed로 둔다
 
-    Note over S,G: 2-1. 카카오톡 방 단위 판단: 워커의 kakao-judge 스레드 (15초마다, app/services/kakao_judge.py)
+    Note over S,G: 2-1. 카카오톡 방 단위 판단: 워커의 kakao-judge 스레드 (5초마다, app/services/kakao_judge.py)
     loop KAKAO_JUDGE_POLL_SECONDS
-        W->>S: 판단 대기 방 중 대화가 70초 멈췄거나(SETTLE) 첫 새 메시지 뒤 5분 지난(MAX_WAIT) 방
+        W->>S: 판단 대기 방 중 대화가 70초(폰 알림이 들어온 방은 20초, PHONE_SETTLE) 멈췄거나(SETTLE) 첫 새 메시지 뒤 5분 지난(MAX_WAIT) 방
         W->>W: 방 CSV 의 최근 20건(WINDOW). 판단 열이 빈 12시간 안의 메시지에 ▶ (새 메시지), 나머지는 맥락<br/>새 메시지가 20건보다 많으면 20건씩 나눔
         W->>J: 대화 창 + prompts/kakao.toml (▶ 메시지에 챙길 일이 있는가)
         J-->>W: useful 확률
