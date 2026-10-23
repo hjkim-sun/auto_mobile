@@ -3,16 +3,21 @@
 
 - kakaocli(https://github.com/silver-flight-group/kakaocli)로 DB 를 읽기 전용으로 조회한다.
 - 1:1 방(NTChatRoom.type 0)과 단톡방(type 1)만 보낸다. 오픈채팅(4), 카카오톡 채널(2), 나와의 채팅(5)은 뺀다.
-- 서버가 log_id 로 중복을 거르므로 같은 기간을 다시 보내도 된다.
+- 보낼 때마다 마지막 전송 시각을 맥의 상태 파일에 적고, 다음에는 그 이후에 보낸 메시지만 보낸다.
+  맥을 끄거나 재웠다 켜도 마지막 전송 이후분을 알아서 채운다. 상태 파일이 없으면(처음) 최근 2일치를 보낸다.
+- 맥 카톡은 메시지를 보낸 시각(sentAt)보다 조금 늦게 DB 에 넣으므로, 마지막 전송 시각보다 OVERLAP 초 앞부터 읽는다.
+  서버가 log_id 로 중복을 거르므로 겹쳐 보내도 된다.
 
 환경 변수 (저장소에 넣지 않는다)
   KAKAOCLI_USER_ID   내 카카오 userId. DB 키를 만들 때와 내가 보낸 메시지를 가릴 때 쓴다
   INGEST_URL         서버 주소 (예: https://example.com)
   INGEST_TOKEN       없으면 저장소 .env 의 INGEST_TOKEN
   KAKAOCLI           kakaocli 경로 (기본 kakaocli)
+  KAKAO_SYNC_STATE   상태 파일 (기본 ~/Library/Application Support/auto_mobile/kakao_sync.json)
 
-실행: python3 tools/kakao_sync.py [--days 2] [--dry-run]
-주기 실행(1분)은 tools/install_kakao_sync.sh 로 launchd 에 등록한다. 맥을 오래 꺼 뒀으면 --days 를 늘려 한 번 돌린다.
+실행: python3 tools/kakao_sync.py [--days N] [--dry-run]
+주기 실행(1분)은 tools/install_kakao_sync.sh 로 launchd 에 등록한다.
+--days 를 주면 상태 파일과 관계없이 최근 N일치를 다시 보낸다(빠진 것을 확실히 채우고 싶을 때).
 """
 from __future__ import annotations
 
@@ -30,6 +35,8 @@ ROOM_KINDS = {0: "personal", 1: "group"}
 SKIP_TYPES = (0, 1999)   # 0: 입장·퇴장 같은 시스템 메시지, 1999: 보낸 사람도 본문도 없는 메시지
 PLACEHOLDER = {2: "(사진)", 3: "(동영상)", 12: "(이모티콘)", 18: "(파일)", 20: "(이모티콘)", 27: "(사진)"}
 ME = "나"
+FIRST_DAYS = 2       # 상태 파일이 없을 때 보낼 기간
+OVERLAP = 300        # 마지막 전송 시각보다 이만큼 앞부터 다시 읽는다 (맥 DB 에 늦게 들어오는 메시지)
 NAME_SQL = "COALESCE(NULLIF(u.friendNickName,''), NULLIF(u.nickName,''), NULLIF(u.displayName,''))"
 
 
@@ -48,7 +55,27 @@ def token() -> str:
     sys.exit("INGEST_TOKEN 이 없다")
 
 
-def collect(days: int, me: int) -> dict:
+def state_path() -> Path:
+    default = Path.home() / "Library" / "Application Support" / "auto_mobile" / "kakao_sync.json"
+    return Path(os.environ.get("KAKAO_SYNC_STATE") or default)
+
+
+def last_sent() -> int | None:
+    try:
+        return int(json.loads(state_path().read_text())["last_sent_at"])
+    except (FileNotFoundError, KeyError, ValueError):
+        return None
+
+
+def save_last_sent(at: int) -> None:
+    path = state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"last_sent_at": at, "at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(at))}))
+    tmp.replace(path)
+
+
+def collect(since: int, me: int) -> dict:
     names = {uid: name for uid, name in query(
         f"SELECT u.userId, {NAME_SQL} FROM NTUser u WHERE u.linkId = 0") if name}
     members: dict[int, set[int]] = {}
@@ -69,7 +96,6 @@ def collect(days: int, me: int) -> dict:
         rooms.append({"chat_id": cid, "kind": "group", "name": chat_name or ", ".join(people[:5]),
                       "members": people})
 
-    since = int(time.time()) - days * 86400
     messages = []
     for cid, log_id, sent_at, author, mtype, text in query(
             "SELECT m.chatId, m.logId, m.sentAt, m.authorId, m.type, m.message FROM NTChatMessage m "
@@ -83,13 +109,22 @@ def collect(days: int, me: int) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--days", type=int, default=2, help="최근 며칠치를 보낼지. 맥을 오래 꺼 뒀으면 늘린다")
-    ap.add_argument("--dry-run", action="store_true", help="보내지 않고 건수만 본다")
+    ap.add_argument("--days", type=int, help="마지막 전송 시각 대신 최근 며칠치를 보낸다")
+    ap.add_argument("--dry-run", action="store_true", help="보내지 않고 건수만 본다. 상태 파일도 그대로 둔다")
     args = ap.parse_args()
     me = int(os.environ["KAKAOCLI_USER_ID"])
-    history = collect(args.days, me)
+    started = int(time.time())
+    last = last_sent()
+    if args.days is not None:
+        since = started - args.days * 86400
+    elif last is not None:
+        since = last - OVERLAP
+    else:
+        since = started - FIRST_DAYS * 86400
+    history = collect(since, me)
     kinds = [r["kind"] for r in history["rooms"]]
-    print(f"rooms personal={kinds.count('personal')} group={kinds.count('group')} "
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} since {time.strftime('%m-%d %H:%M:%S', time.localtime(since))} "
+          f"rooms personal={kinds.count('personal')} group={kinds.count('group')} "
           f"messages={len(history['messages'])}")
     if args.dry_run:
         return
@@ -99,6 +134,8 @@ def main() -> None:
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {token()}"})
     with urllib.request.urlopen(req, timeout=60) as res:
         print(res.read().decode())
+    # 서버가 받은 뒤에만 적는다. 실패하면 다음 실행이 같은 시각부터 다시 보낸다
+    save_last_sent(started)
 
 
 if __name__ == "__main__":
