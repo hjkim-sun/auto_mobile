@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.api.brief import router as brief_router
 from app.api.health import router as health_router
 from app.api.ingest import router as ingest_router
 from app.api.transcriptions import router as transcriptions_router
@@ -28,6 +29,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Auto Mobile API", lifespan=lifespan)
 app.include_router(ingest_router)
 app.include_router(verdicts_router)
+app.include_router(brief_router)
 app.include_router(transcriptions_router)
 app.include_router(health_router)
 app.include_router(web_router)

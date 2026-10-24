@@ -39,6 +39,7 @@ uv run pytest
 | POST | `/v1/ingest/emails?account=naver\|gmail` | raw .eml |
 | POST | `/v1/ingest/kakao` | `{"title", "message", "ticker", "when", "channel", "extras"}` (Automate 알림 출력) |
 | POST | `/v1/ingest/kakao/history` | `{"rooms": [{"chat_id", "kind": "personal"\|"group", "name", "members"}], "messages": [{"chat_id", "log_id", "sent_at", "author", "text"}]}` |
+| POST | `/v1/brief/call?number=&name=` | 없음. 전화 수신 브리핑 (아래) |
 | GET | `/v1/verdicts/messages?status=&limit=&before_id=` | |
 | GET | `/v1/verdicts/emails?status=&limit=&before_id=` | |
 | POST | `/v1/transcriptions` | `{"input_path", "output_dir"?, "language"?}` |
@@ -62,7 +63,7 @@ payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위
 
 카카오톡 대화 기록(`/v1/ingest/kakao/history`)은 맥에서 `tools/kakao_sync.py` 가 보낸다. 맥 카카오톡 DB 를
 [kakaocli](https://github.com/silver-flight-group/kakaocli)로 읽어 1:1 방과 단톡방(오픈채팅·채널·나와의 채팅 제외)의
-마지막 전송 이후 메시지를 보낸다. 서버는 방마다 CSV(`일시,사용자명,톡 내용,log_id,jev 판단,claude 판단`)에 log_id 로
+마지막으로 보낸 메시지 이후 메시지를 보낸다. 서버는 방마다 CSV(`일시,사용자명,톡 내용,log_id,jev 판단,claude 판단`)에 log_id 로
 중복을 걸러 쌓고, 응답은 `{"rooms", "added", "duplicates", "unknown_room"}` 이다. 새 메시지가 들어간 방은 방 단위 판단 대기가 된다.
 `log_id` 는 폰 알림의 `chatLogId` 와 같은 값이다(Automate 를 거치면 double 이라 끝자리가 ±256 안에서 달라진다).
 
@@ -87,8 +88,10 @@ KAKAOCLI_USER_ID=<내 카카오 userId> INGEST_URL=https://<서버> python3 tool
 tools/install_kakao_sync.sh <내 카카오 userId> https://<서버> [interval초=60]   # launchd 1분 주기 등록
 ```
 주기 실행은 launchd(`com.auto_mobile.kakao_sync`)가 1분마다 돌린다. 로그는 `~/Library/Logs/kakao_sync.log`.
-보낼 때마다 마지막 전송 시각을 `~/Library/Application Support/auto_mobile/kakao_sync.json` 에 적고, 다음에는 그 5분 전 이후에
-보낸 메시지만 보낸다(맥 DB 에 늦게 들어오는 메시지를 덮는 여유. 중복은 서버가 거른다). 맥을 꺼 뒀다 켜도 그동안의 메시지를 알아서 채운다.
+맥 카톡(`KakaoTalk` 프로세스)이 떠 있지 않으면 DB 를 읽지 않고 바로 끝낸다.
+보낼 때마다 보낸 메시지 중 가장 늦은 `sentAt` 을 `~/Library/Application Support/auto_mobile/kakao_sync.json` 에 적고, 다음에는 그 5분 전 이후에
+보낸 메시지만 보낸다(맥 DB 에 늦게 들어오는 메시지를 덮는 여유. 중복은 서버가 거른다). 실행 시각이 아니라 `sentAt` 을 적으므로
+맥이나 카톡을 꺼 뒀다 켜서 그동안의 메시지가 원래 시각으로 DB 에 들어와도 빠지지 않는다.
 상태 파일이 없으면 최근 2일치, `--days N` 이면 상태와 관계없이 N일치를 보낸다.
 처음 등록하면 macOS 가 python 의 다른 앱 데이터 접근을 물으므로 허용한다. 다시 묻는 일을 없애려면 kakaocli 와 python 에 전체 디스크 접근 권한을 준다.
 맥 카톡이 로그인돼 있는 동안 폰 카톡 알림은 `quiet_new_message` 로 와서 폰 플로우가 보내지 않는다. 맥이 꺼져 있을 때만 폰이 보낸다.
@@ -108,6 +111,14 @@ payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단�
 번호는 처음 말한 사람부터 매기므로 누가 "나"인지는 알 수 없다. 통화는 2명으로 보고 나눈다
 (`DIARIZATION_NUM_SPEAKERS`, 0 이면 `DIARIZATION_THRESHOLD` 로 추정). `DIARIZATION_ENABLED=false` 거나
 모델 파일(`DIARIZATION_SEGMENTATION_MODEL`, `DIARIZATION_EMBEDDING_MODEL`)이 없거나 화자 분리가 실패하면 화자 없이 저장한다.
+
+전화 수신 브리핑(`/v1/brief/call`)은 폰 Automate 가 전화가 올 때 부른다(`app/services/call_brief.py`).
+`number`(발신 번호)와 같은 번호의 문자, `name`(연락처 이름)과의 1:1 카톡과 그 사람이 단톡방에서 쓴 말을
+`BRIEF_DAYS`(30일) 안에서 각각 최근 `BRIEF_MAX_MESSAGES`(40)건 모아 `claude -p`(`BRIEF_MODEL` haiku, 도구 없음,
+`prompts/call_brief.md`)로 최근 주제를 3줄 요약한다. 응답은 `{"title": "📞 홍길동", "text": 3줄 요약, "sms", "kakao", "elapsed"}`
+이고 폰이 알림으로 띄운다. 대화가 없으면 claude 를 부르지 않고, 요약이 `BRIEF_TIMEOUT_SECONDS`(15초) 안에 안 끝나거나
+실패하면 마지막 대화 한 줄을 돌려준다. 미리 만들어 두지 않고 그때 요약한다(서버에서 3~5초).
+문자는 폰이 받은 문자만 보내므로 내가 보낸 문자는 요약에 없다.
 
 `/v1/health` 를 뺀 모든 API 는 `Authorization: Bearer <INGEST_TOKEN>` 이 필요하다.
 

@@ -34,7 +34,7 @@ sequenceDiagram
     end
 
     opt 카카오톡 대화 기록 (맥 launchd 1분마다. 맥 카톡이 켜져 있으면 폰 알림은 quiet 채널이라 이쪽만 들어옴)
-        X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음. 1:1 방·단톡방만<br/>마지막 전송 시각(맥 상태 파일) 5분 전 이후에 보낸 메시지. 처음이면 2일치, --days N 이면 N일치
+        X->>X: 맥 카카오톡 DB 를 kakaocli 로 읽음. 1:1 방·단톡방만<br/>맥 카톡이 꺼져 있으면 건너뜀<br/>마지막으로 보낸 메시지의 sentAt(맥 상태 파일) 5분 전 이후에 보낸 메시지. 처음이면 2일치, --days N 이면 N일치
         X->>A: POST /v1/ingest/kakao/history {rooms, messages}
         A->>S: data/raw/kakao/rooms.json(방 목록·단톡 참여자),<br/>personal/{상대 이름}.csv, group/{chat_id}.csv 에 log_id 로 중복 거르고 log_id 순으로 저장<br/>새 메시지가 들어간 방은 rooms.json 에 판단 대기(unjudged_since, last_added)로 표시<br/>폰 알림으로 먼저 들어간 행(log_id ±512)은 맥의 정확한 log_id 행으로 바꿈
         A-->>X: 200 → 맥 상태 파일에 이번 전송 시각 기록 (실패하면 기록하지 않아 다음에 다시 보냄)
@@ -138,6 +138,12 @@ sequenceDiagram
     B->>L: 읽기 전용으로 질문
     L-->>B: 답 (근거 페이지, #번호)
     B->>U: DM 답장
+
+    Note over C,L: 4-1. 전화 수신 브리핑 (전화 수신 브리핑 플로우, app/services/call_brief.py)
+    C->>A: 전화가 오면 POST /v1/brief/call?number=&name=
+    A->>S: 같은 번호의 문자(events), 이름이 같은 1:1 카톡 방과 그 사람이 단톡방에서 쓴 말(방 CSV)<br/>최근 30일, 각각 40건까지
+    A->>L: claude -p (haiku, 도구 없음) 3줄 요약. 대화가 없으면 부르지 않음
+    A-->>C: {title, text} → 폰이 안드로이드 알림으로 띄움<br/>15초 안에 못 끝내면 마지막 대화 한 줄
 
     Note over C,S: 5. 조회
     C->>A: GET /v1/verdicts/messages

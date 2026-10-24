@@ -127,6 +127,15 @@ class Settings(BaseSettings):
     # kept 알림을 원문 그대로 보내지 않고, 에이전트가 위키에서 맥락을 찾아 비서처럼 브리핑한다.
     agent_briefing: bool = True
 
+    # 전화 수신 브리핑 (app/services/call_brief.py). 전화 건 사람과의 최근 카톡·문자를 claude 로 3줄 요약한다.
+    # 벨이 울리는 동안 답해야 하므로 빠른 모델을 쓰고 오래 걸리면 끊는다.
+    brief_model: str = "haiku"
+    brief_prompt_path: Path = Path("prompts/call_brief.md")
+    brief_timeout_seconds: float = Field(default=15, gt=0)
+    # 이 기간 안의 대화만, 카톡·문자 각각 최근 이만큼까지 넣는다
+    brief_days: int = Field(default=30, ge=1)
+    brief_max_messages: int = Field(default=40, ge=1)
+
     # 네이버 캘린더 (CalDAV). 위키 빌더가 고른 일정을 넣는다. 계정은 MAIL_ACCOUNTS 의 name 으로 고르고,
     # 비우면 첫 번째 네이버 계정을 쓴다. 메일과 같은 애플리케이션 비밀번호로 로그인된다.
     calendar_enabled: bool = True
