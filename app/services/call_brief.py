@@ -3,7 +3,7 @@
 폰 Automate 가 전화 수신을 잡아 발신 번호와 연락처 이름을 보내고, 응답의 text 를 안드로이드 알림으로 띄운다.
 벨이 울리는 동안 답해야 하므로 미리 만들어 두지 않고 그때 claude -p(BRIEF_MODEL, 도구 없음)로 요약한다.
 - 문자: events 의 message 중 발신 번호(from)가 같은 것. 번호는 숫자만 남기고 +82 를 0 으로 바꿔 비교한다.
-- 카톡: rooms.json 의 1:1 방 중 이름이 연락처 이름과 같은 방, 그리고 그 사람이 참여한 단톡방에서 그 사람이 쓴 말.
+- 카톡: rooms.json 의 1:1 방 중 이름이 연락처 이름과 같은 방(이름이 없으면 같은 번호의 지난 통화녹음에 붙은 이름), 그리고 그 사람이 참여한 단톡방에서 그 사람이 쓴 말.
 BRIEF_DAYS 안의 것만, 각각 최근 BRIEF_MAX_MESSAGES 건까지 넣는다. 대화가 없으면 claude 를 부르지 않는다.
 """
 from __future__ import annotations
@@ -32,6 +32,18 @@ class BriefError(RuntimeError):
 def normalize_number(number: str | None) -> str:
     digits = re.sub(r"\D", "", number or "")
     return "0" + digits[2:] if digits.startswith("82") and len(digits) > 9 else digits
+
+
+def name_for_number(number: str) -> str:
+    """폰이 이름을 못 보냈을 때, 같은 번호의 지난 통화녹음에 붙은 연락처 이름."""
+    target = normalize_number(number)
+    if not target:
+        return ""
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT json_extract(payload, '$.number') AS number, json_extract(payload, '$.name') AS name"
+                            " FROM events WHERE source = 'call' AND json_extract(payload, '$.name') IS NOT NULL"
+                            " ORDER BY id DESC LIMIT 2000").fetchall()
+    return next((r["name"] for r in rows if normalize_number(r["number"]) == target), "")
 
 
 def sms_lines(number: str, since: str, limit: int) -> list[str]:
@@ -95,7 +107,7 @@ def brief(number: str | None, name: str | None) -> dict:
     """{title, text, sms, kakao, elapsed}. text 는 알림 본문(3줄 요약)이다."""
     s = get_settings()
     started = time.monotonic()
-    name = (name or "").strip()
+    name = (name or "").strip() or name_for_number(number or "")
     who = name or (number or "").strip() or "모르는 번호"
     since = (datetime.now(s.tz) - timedelta(days=s.brief_days)).strftime("%Y-%m-%d %H:%M:%S")
     sms = sms_lines(number or "", since, s.brief_max_messages)
