@@ -79,6 +79,17 @@ def test_brief_requires_token(client, monkeypatch):
     assert client.post("/v1/brief/call", params={"name": "홍길동"}).status_code == 401
 
 
+def test_brief_finds_name_from_past_calls(client, asked):
+    import time
+    now = int(time.time())
+    client.post("/v1/ingest/kakao/history", json=history(now))
+    res = client.post("/v1/ingest/calls", params={"filename": "a.m4a", "number": "01012345678", "name": "홍길동"},
+                      content=b"audio")
+    assert res.status_code == 201
+    body = client.post("/v1/brief/call", params={"number": "+821012345678"}).json()
+    assert body["title"] == "📞 홍길동" and body["kakao"] == 3
+
+
 def test_normalize_number():
     assert call_brief.normalize_number("+82 10-1234-5678") == "01012345678"
     assert call_brief.normalize_number("010-1234-5678") == "01012345678"
