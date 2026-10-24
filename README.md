@@ -39,6 +39,7 @@ uv run pytest
 | POST | `/v1/ingest/emails?account=naver\|gmail` | raw .eml |
 | POST | `/v1/ingest/kakao` | `{"title", "message", "ticker", "when", "channel", "extras"}` (Automate 알림 출력) |
 | POST | `/v1/ingest/kakao/history` | `{"rooms": [{"chat_id", "kind": "personal"\|"group", "name", "members"}], "messages": [{"chat_id", "log_id", "sent_at", "author", "text"}]}` |
+| POST | `/v1/brief/call?number=&name=` | 없음. 전화 수신 브리핑 (아래) |
 | GET | `/v1/verdicts/messages?status=&limit=&before_id=` | |
 | GET | `/v1/verdicts/emails?status=&limit=&before_id=` | |
 | POST | `/v1/transcriptions` | `{"input_path", "output_dir"?, "language"?}` |
@@ -110,6 +111,14 @@ payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단�
 번호는 처음 말한 사람부터 매기므로 누가 "나"인지는 알 수 없다. 통화는 2명으로 보고 나눈다
 (`DIARIZATION_NUM_SPEAKERS`, 0 이면 `DIARIZATION_THRESHOLD` 로 추정). `DIARIZATION_ENABLED=false` 거나
 모델 파일(`DIARIZATION_SEGMENTATION_MODEL`, `DIARIZATION_EMBEDDING_MODEL`)이 없거나 화자 분리가 실패하면 화자 없이 저장한다.
+
+전화 수신 브리핑(`/v1/brief/call`)은 폰 Automate 가 전화가 올 때 부른다(`app/services/call_brief.py`).
+`number`(발신 번호)와 같은 번호의 문자, `name`(연락처 이름)과의 1:1 카톡과 그 사람이 단톡방에서 쓴 말을
+`BRIEF_DAYS`(30일) 안에서 각각 최근 `BRIEF_MAX_MESSAGES`(40)건 모아 `claude -p`(`BRIEF_MODEL` haiku, 도구 없음,
+`prompts/call_brief.md`)로 최근 주제를 3줄 요약한다. 응답은 `{"title": "📞 홍길동", "text": 3줄 요약, "sms", "kakao", "elapsed"}`
+이고 폰이 알림으로 띄운다. 대화가 없으면 claude 를 부르지 않고, 요약이 `BRIEF_TIMEOUT_SECONDS`(15초) 안에 안 끝나거나
+실패하면 마지막 대화 한 줄을 돌려준다. 미리 만들어 두지 않고 그때 요약한다(서버에서 3~5초).
+문자는 폰이 받은 문자만 보내므로 내가 보낸 문자는 요약에 없다.
 
 `/v1/health` 를 뺀 모든 API 는 `Authorization: Bearer <INGEST_TOKEN>` 이 필요하다.
 

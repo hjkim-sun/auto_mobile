@@ -139,6 +139,12 @@ sequenceDiagram
     L-->>B: 답 (근거 페이지, #번호)
     B->>U: DM 답장
 
+    Note over C,L: 4-1. 전화 수신 브리핑 (전화 수신 브리핑 플로우, app/services/call_brief.py)
+    C->>A: 전화가 오면 POST /v1/brief/call?number=&name=
+    A->>S: 같은 번호의 문자(events), 이름이 같은 1:1 카톡 방과 그 사람이 단톡방에서 쓴 말(방 CSV)<br/>최근 30일, 각각 40건까지
+    A->>L: claude -p (haiku, 도구 없음) 3줄 요약. 대화가 없으면 부르지 않음
+    A-->>C: {title, text} → 폰이 안드로이드 알림으로 띄움<br/>15초 안에 못 끝내면 마지막 대화 한 줄
+
     Note over C,S: 5. 조회
     C->>A: GET /v1/verdicts/messages
     A->>S: 판별 결과 조회
