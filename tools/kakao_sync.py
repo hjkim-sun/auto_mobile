@@ -3,9 +3,11 @@
 
 - kakaocli(https://github.com/silver-flight-group/kakaocli)로 DB 를 읽기 전용으로 조회한다.
 - 1:1 방(NTChatRoom.type 0)과 단톡방(type 1)만 보낸다. 오픈채팅(4), 카카오톡 채널(2), 나와의 채팅(5)은 뺀다.
-- 보낼 때마다 마지막 전송 시각을 맥의 상태 파일에 적고, 다음에는 그 이후에 보낸 메시지만 보낸다.
-  맥을 끄거나 재웠다 켜도 마지막 전송 이후분을 알아서 채운다. 상태 파일이 없으면(처음) 최근 2일치를 보낸다.
-- 맥 카톡은 메시지를 보낸 시각(sentAt)보다 조금 늦게 DB 에 넣으므로, 마지막 전송 시각보다 OVERLAP 초 앞부터 읽는다.
+- 맥 카톡(KakaoTalk 프로세스)이 떠 있지 않으면 DB 를 읽지 않고 끝낸다. 꺼져 있으면 DB 에 새 메시지가 들어오지 않는다.
+- 보낼 때마다 보낸 메시지 중 가장 늦은 sentAt 을 맥의 상태 파일에 적고, 다음에는 그 이후에 보낸 메시지만 보낸다.
+  실행 시각이 아니라 sentAt 을 적으므로, 카톡을 꺼 뒀다 켜서 그동안의 메시지가 원래 보낸 시각으로 DB 에 들어와도 빠지지 않는다.
+  상태 파일이 없으면(처음) 최근 2일치를 보낸다.
+- 맥 카톡은 메시지를 보낸 시각(sentAt)보다 조금 늦게 DB 에 넣으므로, 상태 파일의 시각보다 OVERLAP 초 앞부터 읽는다.
   서버가 log_id 로 중복을 거르므로 겹쳐 보내도 된다.
 
 환경 변수 (저장소에 넣지 않는다)
@@ -17,7 +19,7 @@
 
 실행: python3 tools/kakao_sync.py [--days N] [--dry-run]
 주기 실행(1분)은 tools/install_kakao_sync.sh 로 launchd 에 등록한다.
---days 를 주면 상태 파일과 관계없이 최근 N일치를 다시 보낸다(빠진 것을 확실히 채우고 싶을 때).
+--days 를 주면 상태 파일과 관계없이 최근 N일치를 다시 보낸다(빠진 것을 확실히 채우고 싶을 때). 카톡이 꺼져 있어도 읽는다.
 """
 from __future__ import annotations
 
@@ -36,7 +38,7 @@ SKIP_TYPES = (0, 1999)   # 0: 입장·퇴장 같은 시스템 메시지, 1999: �
 PLACEHOLDER = {2: "(사진)", 3: "(동영상)", 12: "(이모티콘)", 18: "(파일)", 20: "(이모티콘)", 27: "(사진)"}
 ME = "나"
 FIRST_DAYS = 2       # 상태 파일이 없을 때 보낼 기간
-OVERLAP = 300        # 마지막 전송 시각보다 이만큼 앞부터 다시 읽는다 (맥 DB 에 늦게 들어오는 메시지)
+OVERLAP = 300        # 상태 파일의 sentAt 보다 이만큼 앞부터 다시 읽는다 (맥 DB 에 늦게 들어오는 메시지)
 NAME_SQL = "COALESCE(NULLIF(u.friendNickName,''), NULLIF(u.nickName,''), NULLIF(u.displayName,''))"
 
 
@@ -71,6 +73,7 @@ def save_last_sent(at: int) -> None:
     path = state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
+    # last_sent_at: 서버가 받은 메시지 중 가장 늦은 sentAt
     tmp.write_text(json.dumps({"last_sent_at": at, "at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(at))}))
     tmp.replace(path)
 
@@ -112,6 +115,8 @@ def main() -> None:
     ap.add_argument("--days", type=int, help="마지막 전송 시각 대신 최근 며칠치를 보낸다")
     ap.add_argument("--dry-run", action="store_true", help="보내지 않고 건수만 본다. 상태 파일도 그대로 둔다")
     args = ap.parse_args()
+    if args.days is None and subprocess.run(["pgrep", "-xq", "KakaoTalk"]).returncode != 0:
+        return
     me = int(os.environ["KAKAOCLI_USER_ID"])
     started = int(time.time())
     last = last_sent()
@@ -134,8 +139,10 @@ def main() -> None:
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {token()}"})
     with urllib.request.urlopen(req, timeout=60) as res:
         print(res.read().decode())
-    # 서버가 받은 뒤에만 적는다. 실패하면 다음 실행이 같은 시각부터 다시 보낸다
-    save_last_sent(started)
+    # 서버가 받은 뒤에만 적는다. 실패하면 다음 실행이 같은 시각부터 다시 보낸다. --days 로 옛것을 보내도 뒤로 돌리지 않는다
+    newest = max((m["sent_at"] for m in history["messages"]), default=None)
+    if newest is not None and (last is None or newest > last):
+        save_last_sent(newest)
 
 
 if __name__ == "__main__":

@@ -62,7 +62,7 @@ payload 에 그대로 저장하고(`call_date_text` 추가), 판별·알림·위
 
 카카오톡 대화 기록(`/v1/ingest/kakao/history`)은 맥에서 `tools/kakao_sync.py` 가 보낸다. 맥 카카오톡 DB 를
 [kakaocli](https://github.com/silver-flight-group/kakaocli)로 읽어 1:1 방과 단톡방(오픈채팅·채널·나와의 채팅 제외)의
-마지막 전송 이후 메시지를 보낸다. 서버는 방마다 CSV(`일시,사용자명,톡 내용,log_id,jev 판단,claude 판단`)에 log_id 로
+마지막으로 보낸 메시지 이후 메시지를 보낸다. 서버는 방마다 CSV(`일시,사용자명,톡 내용,log_id,jev 판단,claude 판단`)에 log_id 로
 중복을 걸러 쌓고, 응답은 `{"rooms", "added", "duplicates", "unknown_room"}` 이다. 새 메시지가 들어간 방은 방 단위 판단 대기가 된다.
 `log_id` 는 폰 알림의 `chatLogId` 와 같은 값이다(Automate 를 거치면 double 이라 끝자리가 ±256 안에서 달라진다).
 
@@ -87,8 +87,10 @@ KAKAOCLI_USER_ID=<내 카카오 userId> INGEST_URL=https://<서버> python3 tool
 tools/install_kakao_sync.sh <내 카카오 userId> https://<서버> [interval초=60]   # launchd 1분 주기 등록
 ```
 주기 실행은 launchd(`com.auto_mobile.kakao_sync`)가 1분마다 돌린다. 로그는 `~/Library/Logs/kakao_sync.log`.
-보낼 때마다 마지막 전송 시각을 `~/Library/Application Support/auto_mobile/kakao_sync.json` 에 적고, 다음에는 그 5분 전 이후에
-보낸 메시지만 보낸다(맥 DB 에 늦게 들어오는 메시지를 덮는 여유. 중복은 서버가 거른다). 맥을 꺼 뒀다 켜도 그동안의 메시지를 알아서 채운다.
+맥 카톡(`KakaoTalk` 프로세스)이 떠 있지 않으면 DB 를 읽지 않고 바로 끝낸다.
+보낼 때마다 보낸 메시지 중 가장 늦은 `sentAt` 을 `~/Library/Application Support/auto_mobile/kakao_sync.json` 에 적고, 다음에는 그 5분 전 이후에
+보낸 메시지만 보낸다(맥 DB 에 늦게 들어오는 메시지를 덮는 여유. 중복은 서버가 거른다). 실행 시각이 아니라 `sentAt` 을 적으므로
+맥이나 카톡을 꺼 뒀다 켜서 그동안의 메시지가 원래 시각으로 DB 에 들어와도 빠지지 않는다.
 상태 파일이 없으면 최근 2일치, `--days N` 이면 상태와 관계없이 N일치를 보낸다.
 처음 등록하면 macOS 가 python 의 다른 앱 데이터 접근을 물으므로 허용한다. 다시 묻는 일을 없애려면 kakaocli 와 python 에 전체 디스크 접근 권한을 준다.
 맥 카톡이 로그인돼 있는 동안 폰 카톡 알림은 `quiet_new_message` 로 와서 폰 플로우가 보내지 않는다. 맥이 꺼져 있을 때만 폰이 보낸다.
