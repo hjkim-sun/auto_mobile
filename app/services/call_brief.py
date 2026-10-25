@@ -107,7 +107,8 @@ def brief(number: str | None, name: str | None) -> dict:
     """{title, text, sms, kakao, elapsed}. text 는 알림 본문(3줄 요약)이다."""
     s = get_settings()
     started = time.monotonic()
-    name = (name or "").strip() or name_for_number(number or "")
+    # 폰 Content query 는 "이름, 010-1234-5678" 처럼 번호를 붙여 보낸다
+    name = re.sub(r",\s*[+\d][\d\s()-]*$", "", (name or "").strip()) or name_for_number(number or "")
     who = name or (number or "").strip() or "모르는 번호"
     since = (datetime.now(s.tz) - timedelta(days=s.brief_days)).strftime("%Y-%m-%d %H:%M:%S")
     sms = sms_lines(number or "", since, s.brief_max_messages)

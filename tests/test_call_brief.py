@@ -94,3 +94,10 @@ def test_normalize_number():
     assert call_brief.normalize_number("+82 10-1234-5678") == "01012345678"
     assert call_brief.normalize_number("010-1234-5678") == "01012345678"
     assert call_brief.normalize_number("1588-0000") == "15880000"
+
+
+def test_brief_strips_number_from_name(client, asked):
+    import time
+    client.post("/v1/ingest/kakao/history", json=history(int(time.time())))
+    body = client.post("/v1/brief/call", params={"number": "01012345678", "name": "홍길동, 010-1234-5678"}).json()
+    assert body["title"] == "📞 홍길동" and body["kakao"] == 3
