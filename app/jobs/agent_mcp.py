@@ -16,15 +16,21 @@ PROTOCOL_VERSION = "2025-06-18"
 logger = logging.getLogger(__name__)
 
 
+def allowed() -> list[str]:
+    """캘린더를 바꾸는 도구는 주인과의 대화에서만 내놓는다."""
+    owner = agent_tools.owner_session()
+    return [name for name in agent_tools.TOOLS if owner or name not in agent_tools.WRITE]
+
+
 def tool_list() -> list[dict]:
     return [{"name": name, "description": spec["description"],
              "inputSchema": {"type": "object", "properties": spec["properties"],
                              "required": spec.get("required", [])}}
-            for name, (_, spec) in agent_tools.TOOLS.items()]
+            for name, (_, spec) in agent_tools.TOOLS.items() if name in allowed()]
 
 
 def call_tool(name: str, arguments: dict) -> dict:
-    if name not in agent_tools.TOOLS:
+    if name not in allowed():
         return {"content": [{"type": "text", "text": f"없는 도구: {name}"}], "isError": True}
     func, _ = agent_tools.TOOLS[name]
     try:

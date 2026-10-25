@@ -102,7 +102,8 @@ def _when(item: sqlite3.Row) -> str:
 
 def calendar_line(item: sqlite3.Row) -> str:
     where = f" @ {item['location']}" if item["location"] else ""
-    return f"[일정 {item['id']}] {_when(item)} {item['title']}{where} (#{item['event_id']})"
+    source = f" (#{item['event_id']})" if item["event_id"] else ""
+    return f"[일정 {item['id']}] {_when(item)} {item['title']}{where}{source}"
 
 
 def calendar_message(item: sqlite3.Row) -> str:

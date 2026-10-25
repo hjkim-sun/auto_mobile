@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS calendar_items (  -- 위키 빌더가 고른 캘린�
     note         TEXT,
     decision     TEXT NOT NULL,            -- add (바로 등록) | ask (사용자에게 묻기)
     reason       TEXT,
-    status       TEXT NOT NULL,            -- pending (등록 대기) | asking (답 대기) | added | declined
+    status       TEXT NOT NULL,            -- pending (등록 대기) | asking (답 대기) | added | declined | removed (넣었다가 지움)
     caldav_uid   TEXT,
     error        TEXT,
     notified     INTEGER NOT NULL DEFAULT 0,  -- Buzz 로 알렸거나 물었는지

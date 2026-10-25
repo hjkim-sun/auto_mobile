@@ -4,6 +4,8 @@ status 흐름
   decision=add: pending → added            (등록 실패면 pending 으로 남아 다음 주기에 다시)
   decision=ask: asking  → pending → added  (사용자가 "등록 N")
                         → declined         (사용자가 "안함 N")
+  Buzz 에이전트가 주인 말대로 넣은 일정(event_id 0 일 수 있음): pending → added
+  added → removed (에이전트가 캘린더에서 지움)
 """
 from __future__ import annotations
 

@@ -99,7 +99,7 @@ def to_ics(item: sqlite3.Row | dict, uid: str) -> str:
         end = _when(item["end"])
     else:
         end = start + (timedelta(hours=1) if isinstance(start, datetime) else timedelta(days=1))
-    note = "\n".join(x for x in (item["note"], f"auto_mobile #{item['event_id']}") if x)
+    note = "\n".join(x for x in (item["note"], item["event_id"] and f"auto_mobile #{item['event_id']}") if x)
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//auto_mobile//wiki//KO", "BEGIN:VEVENT",
              f"UID:{uid}", f"DTSTAMP:{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}",
              _ics_time("DTSTART", start), _ics_time("DTEND", end), f"SUMMARY:{_escape(item['title'])}"]
@@ -119,3 +119,12 @@ def add(item: sqlite3.Row | dict) -> str:
     if r.status_code not in (200, 201, 204):
         raise CalendarError(f"PUT {url}: HTTP {r.status_code} {r.text[:200]}")
     return uid
+
+
+def remove(uid: str) -> None:
+    """add() 로 넣은 일정을 지운다. 이미 없으면 그대로 둔다."""
+    with _client() as client:
+        url = calendar_url(client) + uid + ".ics"
+        r = client.delete(url)
+    if r.status_code not in (200, 204, 404):
+        raise CalendarError(f"DELETE {url}: HTTP {r.status_code} {r.text[:200]}")
