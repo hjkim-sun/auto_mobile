@@ -92,7 +92,7 @@ def render_email(payload: dict, path: Path) -> str:
     # 광고 메일의 추적용 쿼리(?utm_...)가 본문을 차지하지 않게 URL 의 쿼리를 뗀다.
     text = re.sub(r"(https?://[^\s?#)>\]]+)[?#][^\s)>\]]*", r"\1", mail["text"])
     lines = [
-        f"[EMAIL] 계정: {payload.get('account')}",
+        f"[EMAIL] 계정: {payload.get('account')}" + (" · 보낸메일함 (사용자가 보낸 메일)" if payload.get("sent") else ""),
         f"보낸 사람: {mail['from']}",
         f"받는 사람: {mail['to']}",
         f"제목: {mail['subject']}",

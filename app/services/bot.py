@@ -59,6 +59,8 @@ def summary_line(event: sqlite3.Row) -> str:
         what = f"{p.get('room')}: {p['claude']['reason'][:60]}"
     elif event["source"] == "kakao":
         what = f"{p.get('sender')}: {((p.get('text') or '').splitlines() or [''])[0][:60]}"
+    elif event["source"] == "email" and p.get("sent"):
+        what = f"나 → {_sender(p.get('to', ''))}: {p.get('subject') or '(제목 없음)'}"
     elif event["source"] == "email":
         what = f"{_sender(p.get('from', ''))}: {p.get('subject') or '(제목 없음)'}"
     else:

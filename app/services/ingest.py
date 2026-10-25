@@ -279,12 +279,12 @@ async def ingest_email(stream: AsyncIterator[bytes], account: str) -> tuple[int,
     return _store_email(*await receive_body(stream, get_settings().raw_dir / "emails"), account)
 
 
-def ingest_email_bytes(data: bytes, account: str) -> tuple[int, bool]:
-    """메일 폴러(app/jobs/mail_poller.py)가 IMAP 으로 받은 원본을 넣는다."""
-    return _store_email(*save_body(data, get_settings().raw_dir / "emails"), account)
+def ingest_email_bytes(data: bytes, account: str, sent: bool = False) -> tuple[int, bool]:
+    """메일 폴러(app/jobs/mail_poller.py)가 IMAP 으로 받은 원본을 넣는다. sent 는 보낸메일함에서 가져온 메일."""
+    return _store_email(*save_body(data, get_settings().raw_dir / "emails"), account, sent)
 
 
-def _store_email(tmp: Path, size: int, sha: str, account: str) -> tuple[int, bool]:
+def _store_email(tmp: Path, size: int, sha: str, account: str, sent: bool = False) -> tuple[int, bool]:
     with tmp.open("rb") as f:
         mail = BytesParser(policy=policy.default).parse(f, headersonly=True)
     message_id = str(mail.get("Message-ID") or "").strip()
@@ -297,7 +297,7 @@ def _store_email(tmp: Path, size: int, sha: str, account: str) -> tuple[int, boo
     path.parent.mkdir(exist_ok=True)
     tmp.replace(path)
     write_parsed(path)   # 같은 이름의 .json: 헤더, 본문 텍스트, 첨부 목록
-    payload = {"account": account, "message_id": message_id or None,
+    payload = {"account": account, "sent": sent, "message_id": message_id or None,
                "from": str(mail.get("From") or ""), "to": str(mail.get("To") or ""),
                "subject": str(mail.get("Subject") or ""), "date": str(mail.get("Date") or ""),
                "size": size, "sha256": sha}

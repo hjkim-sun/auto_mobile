@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 
 import pytest
 
 from app.core.config import get_settings
-from app.db.session import init_db
+from app.db.session import connect, init_db
 from app.jobs import mail_poller
-from app.repositories import events, mail_cursors
+from app.repositories import buzz_state, events, mail_cursors
+from app.services.render import render
 
 
 def eml(n: int) -> bytes:
@@ -22,8 +24,9 @@ def set_accounts(monkeypatch, *accounts):
 
 
 class FakeIMAP:
-    """imaplib.IMAP4_SSL 대역. boxes 는 {로그인 user: {uid: 원본}}."""
+    """imaplib.IMAP4_SSL 대역. boxes 는 {로그인 user: {uid: 원본}} (받은편지함), sent 는 같은 꼴의 보낸메일함."""
     boxes: dict[str, dict[int, bytes]] = {}
+    sent: dict[str, dict[int, bytes]] = {}
     uidvalidity = 100
     searches: list[tuple] = []
 
@@ -39,10 +42,17 @@ class FakeIMAP:
     def login(self, user, password):
         if password != "secret":
             raise mail_poller.imaplib.IMAP4.error("auth failed")
-        self.mailbox = self.boxes[user]
+        self.user = user
+
+    def list(self):
+        lines = [b'(\\HasNoChildren \\Inbox) "/" "INBOX"', b'(\\HasNoChildren \\Drafts) "/" "Drafts"']
+        if self.user in self.sent:
+            lines.append(b'(\\HasNoChildren \\Sent) "/" "Sent Messages"')
+        return "OK", lines
 
     def select(self, mailbox, readonly=False):
         assert readonly
+        self.mailbox = {'"INBOX"': self.boxes, '"Sent Messages"': self.sent}[mailbox][self.user]
         return "OK", [str(len(self.mailbox)).encode()]
 
     def response(self, code):
@@ -69,6 +79,7 @@ def imap(monkeypatch):
     set_accounts(monkeypatch, {"name": "naver", "user": "hong", "password": "secret"})
     monkeypatch.setattr(mail_poller.imaplib, "IMAP4_SSL", FakeIMAP)
     FakeIMAP.boxes = {"hong": {3: eml(3), 7: eml(7)}, "kim": {}}
+    FakeIMAP.sent = {}
     FakeIMAP.uidvalidity = 100
     FakeIMAP.searches = []
     init_db()
@@ -92,6 +103,25 @@ def test_poll_ingests_new_mail_and_moves_cursor(imap):
     assert len(rows) == 3
     assert '"account": "naver"' in rows[0]["payload"]
     assert mail_cursors.get("naver", "INBOX") == (100, 9)
+
+
+def test_sent_mailbox_is_polled_with_its_own_cursor(imap):
+    imap.sent = {"hong": {4: eml(20)}}
+    mail_poller.run(once=True)
+    rows = events.list_events("email")
+    assert len(rows) == 3
+    assert [json.loads(r["payload"])["sent"] for r in rows if "m-20" in r["payload"]] == [True]
+    assert sum(json.loads(r["payload"])["sent"] for r in rows) == 1
+    assert mail_cursors.get("naver", "INBOX") == (100, 7)
+    assert mail_cursors.get("naver", "Sent Messages") == (100, 4)
+
+    # 보낸 메일은 kept 여도 Buzz 로 알리지 않는다
+    with closing(connect()) as conn:
+        conn.execute("UPDATE events SET status = 'kept'")
+    sent_id = next(r["id"] for r in rows if "m-20" in r["payload"])
+    assert sent_id not in [r["id"] for r in buzz_state.unnotified_kept(0)]
+    assert len(buzz_state.unnotified_kept(0)) == 2
+    assert "보낸메일함" in render(next(r for r in rows if r["id"] == sent_id))
 
 
 def test_uidvalidity_change_backfills_without_duplicates(imap):

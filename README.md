@@ -4,7 +4,7 @@
 
 ```
 수신 API (app/api)  ──▶  data/raw/ 원본 저장 + events 테이블 1건 1행
-메일 폴러 (app/jobs/mail_poller.py)  ──▶  IMAP 새 메일을 5분마다 가져와 같은 방식으로 저장
+메일 폴러 (app/jobs/mail_poller.py)  ──▶  IMAP 받은편지함·보낸메일함 새 메일을 5분마다 가져와 같은 방식으로 저장
 워커 (app/jobs/worker.py)  ──▶  pending 이벤트를 하나씩 꺼내 kept / discarded 판별
 ```
 
@@ -161,7 +161,8 @@ MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "앱 비
 - 네이버 메일 환경설정 → POP3/IMAP 설정에서 IMAP 을 켜야 하고, 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다.
 - 같은 메일이 두 계정에 다 오면 Message-ID 로 한 번만 저장되고, 먼저 가져온 계정 이름이 남는다.
 - 읽기 전용으로 열고 `BODY.PEEK` 로 가져오므로 메일이 읽음 처리되지 않는다.
-- 마지막으로 가져온 UID 를 `mail_cursors` 테이블에 남겨 다음 폴링은 그 뒤부터 가져온다.
+- 받은편지함(INBOX)과 보낸메일함을 가져온다. 보낸메일함은 IMAP LIST 의 `\Sent` 표시로 찾는다(네이버 `Sent Messages`, Gmail `[Gmail]/Sent Mail`). 보낸메일함에서 온 메일은 `payload.sent` 가 true 이고, 판별·위키에는 "보낸메일함 (사용자가 보낸 메일)"로 표시되며, kept 여도 Buzz 로 알리지 않는다.
+- 마지막으로 가져온 UID 를 메일함별로 `mail_cursors` 테이블에 남겨 다음 폴링은 그 뒤부터 가져온다.
 - 처음이거나 서버의 UIDVALIDITY 가 바뀌면 `MAIL_BACKFILL_DAYS`(기본 1)일 전부터 다시 가져온다. 중복은 Message-ID 로 걸러진다.
   네이버는 UIDVALIDITY 를 항상 0 으로 준다. 그래도 UID 는 계속 늘어나므로 커서는 그대로 동작한다.
 - 인증 실패나 네트워크 오류는 로그만 남기고 다음 주기에 다시 시도한다. 한 계정이 실패해도 다른 계정은 계속 가져온다.
@@ -186,7 +187,7 @@ BUZZ_NOTIFY_CHANNEL=<채널 UUID>    # 알림을 보낼 채널. 비우면 DM 으
   폰 Buzz 앱 첫 화면의 "Enter a community link" 에 그 링크를 넣는다.
 - 알림(kept 이벤트, 캘린더 등록·질문)은 `BUZZ_NOTIFY_CHANNEL` 이 있으면 그 채널로, 없으면 주인과의 DM 으로 보낸다. 캘린더 질문에 채널에서 답하려면 그 채널을 `BUZZ_LISTEN_CHANNELS` 에도 넣는다.
 - kept 알림은 원문을 그대로 옮기지 않고 에이전트가 브리핑한다. 한 주기에 들어온 것을 묶어, 위키에서 보낸 사람·진행 중인 일·일정을 찾아 무엇인지, 할 일과 기한이 있는지 말한다(`prompts/agent.md` 의 '새 자료 브리핑'). 끝에 `원문: #번호` 를 붙인다. 에이전트가 실패하거나 `AGENT_BRIEFING=false` 면 원문 알림을 보낸다.
-- 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블).
+- 봇을 처음 띄울 때 이미 있던 이벤트는 알리지 않는다. 그 뒤 kept 된 이벤트를 한 번씩 알린다(`notifications` 테이블). 내가 보낸 메일은 알리지 않는다.
 - `BUZZ_OWNER_PUBKEY` 와의 DM 에서는 그 사람의 글에만 답한다. 명령: `도움말`, `오늘`, `문자|카톡|메일|통화 [n]`, `버린 [n]`, `상태`, `#번호`, `위키 <질문>`, `일정`, `등록 N`, `안함 N`, `새대화`.
 
 ### 에이전트

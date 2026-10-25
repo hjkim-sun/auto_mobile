@@ -54,10 +54,10 @@ sequenceDiagram
 
     Note over M,S: 1-1. 메일 수신: 폴러가 IMAP 에서 가져온다
     loop 5분마다 (MAIL_POLL_SECONDS)
-        M->>N: 읽기 전용 SELECT INBOX, 커서 이후 UID 검색
+        M->>N: 받은편지함(INBOX)과 보낸메일함(LIST 의 \\Sent)을 차례로<br/>읽기 전용 SELECT, 메일함마다 커서 이후 UID 검색
         N-->>M: 새 메일 원본 (BODY.PEEK, 읽음 처리 안 함)
-        M->>S: data/raw/emails/YYYYMMDD/*.eml 원본과 파싱한 *.json 저장,<br/>events 행 추가 (source=email). Message-ID 가 이미 있으면 건너뜀
-        M->>S: mail_cursors 에 마지막 UID 기록
+        M->>S: data/raw/emails/YYYYMMDD/*.eml 원본과 파싱한 *.json 저장,<br/>events 행 추가 (source=email, 보낸메일함이면 payload.sent=true). Message-ID 가 이미 있으면 건너뜀
+        M->>S: mail_cursors 에 메일함별 마지막 UID 기록
     end
 
     Note over S,J: 2. 판별: 워커가 큐에서 하나씩 꺼낸다

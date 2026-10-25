@@ -28,10 +28,12 @@ def max_event_id() -> int:
 
 
 def unnotified_kept(after_id: int, limit: int = 20) -> list[sqlite3.Row]:
-    """after_id 보다 뒤에 들어온 kept 이벤트 중 아직 알리지 않은 것. 오래된 것부터."""
+    """after_id 보다 뒤에 들어온 kept 이벤트 중 아직 알리지 않은 것. 오래된 것부터.
+    내가 보낸 메일(payload.sent)은 알리지 않는다. 위키에는 들어간다."""
     with closing(connect()) as conn:
         return conn.execute(
             "SELECT * FROM events WHERE status = 'kept' AND id > ?"
+            " AND NOT (source = 'email' AND COALESCE(json_extract(payload, '$.sent'), 0))"
             " AND id NOT IN (SELECT event_id FROM notifications) ORDER BY id LIMIT ?",
             (after_id, limit),
         ).fetchall()

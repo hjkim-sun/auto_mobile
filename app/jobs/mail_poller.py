@@ -1,5 +1,8 @@
 """IMAP 메일함을 주기적으로 폴링해 새 메일을 events 에 넣는다. 판별은 판별 워커가 한다.
 
+받은편지함(INBOX)과 보낸메일함을 함께 가져온다. 보낸메일함은 LIST 의 \\Sent 표시(SPECIAL-USE)로 찾고,
+없으면 받은편지함만 가져온다. 보낸메일함에서 가져온 메일은 payload.sent 가 true 다.
+
 메일은 읽음 처리하지 않는다(BODY.PEEK, 읽기 전용 SELECT). 어디까지 가져왔는지는 mail_cursors 에 남긴다.
 같은 메일이 다시 와도 Message-ID 로 중복을 거른다(app/services/ingest.py).
 실행: python -m app.jobs.mail_poller [--once]
@@ -72,25 +75,43 @@ def _fetch(imap: imaplib.IMAP4, uid: int) -> bytes:
     raise imaplib.IMAP4.error(f"no body for uid {uid}")
 
 
+def _sent_mailbox(imap: imaplib.IMAP4) -> str | None:
+    """\\Sent 표시가 붙은 메일함 이름. 네이버 "Sent Messages", Gmail "[Gmail]/Sent Mail"."""
+    for line in _check(imap.list()):
+        if isinstance(line, bytes) and (m := re.match(rb'\(([^)]*)\) (?:"[^"]*"|NIL) (.+)$', line)):
+            if b"\\sent" in m.group(1).lower().split():
+                return m.group(2).decode().strip('"')
+    return None
+
+
+def _poll_mailbox(imap: imaplib.IMAP4, account: MailAccount, mailbox: str, sent: bool) -> int:
+    _check(imap.select(f'"{mailbox}"', readonly=True))
+    _, (raw_validity,) = imap.response("UIDVALIDITY")
+    uidvalidity = int(re.sub(rb"\D", b"", raw_validity))
+    cursor = mail_cursors.get(account.name, mailbox)
+    uids = _new_uids(imap, cursor, uidvalidity)
+    if not uids and (cursor is None or cursor[0] != uidvalidity):
+        mail_cursors.save(account.name, mailbox, uidvalidity, 0)
+    created = 0
+    for uid in uids:
+        event_id, new = ingest_email_bytes(_fetch(imap, uid), account.name, sent=sent)
+        # 한 통씩 커서를 옮겨, 도중에 끊겨도 다음 폴링이 이어서 가져간다.
+        mail_cursors.save(account.name, mailbox, uidvalidity, uid)
+        if new:
+            created += 1
+            logger.info("%s %s uid %d → event %d", account.name, mailbox, uid, event_id)
+    return created
+
+
 def poll_account(account: MailAccount) -> int:
     """새로 넣은 메일 수를 돌려준다."""
-    created = 0
     with imaplib.IMAP4_SSL(account.host, timeout=IMAP_TIMEOUT) as imap:
         imap.login(account.user, account.password)
-        _check(imap.select(MAILBOX, readonly=True))
-        _, (raw_validity,) = imap.response("UIDVALIDITY")
-        uidvalidity = int(re.sub(rb"\D", b"", raw_validity))
-        cursor = mail_cursors.get(account.name, MAILBOX)
-        uids = _new_uids(imap, cursor, uidvalidity)
-        if not uids and (cursor is None or cursor[0] != uidvalidity):
-            mail_cursors.save(account.name, MAILBOX, uidvalidity, 0)
-        for uid in uids:
-            event_id, new = ingest_email_bytes(_fetch(imap, uid), account.name)
-            # 한 통씩 커서를 옮겨, 도중에 끊겨도 다음 폴링이 이어서 가져간다.
-            mail_cursors.save(account.name, MAILBOX, uidvalidity, uid)
-            if new:
-                created += 1
-                logger.info("%s uid %d → event %d", account.name, uid, event_id)
+        created = _poll_mailbox(imap, account, MAILBOX, sent=False)
+        if sent_box := _sent_mailbox(imap):
+            created += _poll_mailbox(imap, account, sent_box, sent=True)
+        else:
+            logger.debug("%s has no \\Sent mailbox; polling INBOX only", account.name)
     return created
 
 
