@@ -1,6 +1,6 @@
 """전화 수신 브리핑. 폰 Automate 가 전화가 오면 부르고, 응답의 text 를 알림으로 띄운다.
 
-POST /v1/brief/call?number=<발신 번호>&name=<연락처 이름>   둘 다 선택. 응답 {title, text, sms, kakao, calls, elapsed, summarized_at}
+POST /v1/brief/call?number=<발신 번호>&name=<연락처 이름>   둘 다 선택. 응답 {title, text, sms, kakao, calls, elapsed, summarized_at, html}
 """
 from __future__ import annotations
 

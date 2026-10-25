@@ -11,6 +11,7 @@ BRIEF_DAYS 안의 것만, 문자·카톡은 각각 최근 BRIEF_MAX_MESSAGES 건
 """
 from __future__ import annotations
 
+import html
 import json
 import logging
 import subprocess
@@ -167,8 +168,27 @@ def seed() -> int:
     return len(people - {None})
 
 
+CARD = """<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+body{{margin:0;padding:22px 20px;background:#101418;color:#f4f6f8;font-family:sans-serif}}
+h1{{margin:0 0 16px;font-size:28px}} p{{margin:0 0 12px;font-size:22px;line-height:1.45}}
+small{{display:block;margin-top:16px;color:#8b98a5;font-size:14px}}</style>
+<h1>{title}</h1>{lines}<small>{footer}</small>"""
+
+
+def card(b: dict) -> str:
+    """전화 화면 위에 띄우는 큰 카드(폰 Automate Dialog web 블록의 HTML page)."""
+    if b["summarized_at"]:
+        when = datetime.fromisoformat(b["summarized_at"]).astimezone(get_settings().tz)
+        footer = f"{when:%m-%d %H:%M} 요약"
+    else:
+        footer = "방금 요약"
+    footer += f" · 카톡 {b['kakao'] or 0} · 문자 {b['sms'] or 0} · 통화 {b['calls'] or 0}"
+    lines = "".join(f"<p>{html.escape(line)}</p>" for line in b["text"].splitlines() if line.strip())
+    return CARD.format(title=html.escape(b["title"]), lines=lines, footer=footer)
+
+
 def brief(number: str | None, name: str | None) -> dict:
-    """{title, text, sms, kakao, calls, elapsed, summarized_at}. text 는 알림 본문(3줄 요약)이다."""
+    """{title, text, sms, kakao, calls, elapsed, summarized_at, html}. text 는 알림 본문(3줄 요약), html 은 큰 카드다."""
     started = time.monotonic()
     name = clean_name(name) or call_briefs.name_for_number(number or "")
     who = name or (number or "").strip() or "모르는 번호"
@@ -185,4 +205,5 @@ def brief(number: str | None, name: str | None) -> dict:
             b = {"text": "요약 실패.", "sms": 0, "kakao": 0, "calls": 0}
     elapsed = round(time.monotonic() - started, 2)
     logger.info("call brief for %s: cached=%s %.2fs", who, summarized_at is not None, elapsed)
-    return {"title": f"📞 {who}", **b, "elapsed": elapsed, "summarized_at": summarized_at}
+    result = {"title": f"📞 {who}", **b, "elapsed": elapsed, "summarized_at": summarized_at}
+    return result | {"html": card(result)}

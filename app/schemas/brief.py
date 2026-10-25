@@ -11,3 +11,4 @@ class CallBriefResponse(BaseModel):
     calls: int      # 요약에 넣은 통화 수
     elapsed: float  # 서버에서 걸린 시간(초)
     summarized_at: str | None  # 미리 만들어 둔 요약을 줬으면 만든 시각(UTC). 그때 요약했으면 null
+    html: str       # 전화 화면 위에 띄우는 큰 카드 (폰 Dialog web 블록)

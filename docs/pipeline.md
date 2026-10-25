@@ -146,7 +146,7 @@ sequenceDiagram
     W->>L: claude -p (sonnet, effort low, 도구 없음) 3줄 요약 → call_briefs.summary. 실패하면 is_updated = 1 로 되돌림
     C->>A: 전화가 오면 POST /v1/brief/call?number=&name=
     A->>S: 이름 또는 번호로 call_briefs 조회
-    A-->>C: {title, text, summarized_at} 저장된 요약을 바로 줌. 요약이 없는 사람만 그때 요약(4초 안팎)<br/>폰이 안드로이드 알림으로 띄움(사용자가 닫을 때까지 fiber 가 기다림. 끝나면 Automate 가 알림을 지운다)
+    A-->>C: {title, text, summarized_at, html} 저장된 요약을 바로 줌. 요약이 없는 사람만 그때 요약(4초 안팎)<br/>폰이 html 카드를 Dialog web 으로 전화 화면 위에 띄우고(45초 뒤 닫힘), 닫히면 text 를 알림으로 남김<br/>(알림은 사용자가 닫을 때까지 fiber 가 기다림. 끝나면 Automate 가 알림을 지운다)
 
     Note over C,S: 5. 조회
     C->>A: GET /v1/verdicts/messages
