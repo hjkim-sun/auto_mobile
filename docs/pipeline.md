@@ -142,7 +142,7 @@ sequenceDiagram
     Note over C,L: 4-1. 전화 수신 브리핑 (전화 수신 브리핑 플로우, app/services/call_brief.py)
     C->>A: 전화가 오면 POST /v1/brief/call?number=&name=
     A->>S: 같은 번호의 문자(events), 이름이 같은 1:1 카톡 방과 그 사람이 단톡방에서 쓴 말(방 CSV)<br/>최근 30일, 각각 40건까지
-    A->>L: claude -p (haiku, 도구 없음) 3줄 요약. 대화가 없으면 부르지 않음
+    A->>L: claude -p (sonnet, effort low, 도구 없음) 3줄 요약. 대화가 없으면 부르지 않음
     A-->>C: {title, text} → 폰이 안드로이드 알림으로 띄움(사용자가 닫을 때까지 fiber 가 기다림. 끝나면 Automate 가 알림을 지운다)<br/>15초 안에 못 끝내면 마지막 대화 한 줄
 
     Note over C,S: 5. 조회
