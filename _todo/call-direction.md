@@ -2,7 +2,7 @@
 
 상태: 완료. 2026-10-21 실제 수신/발신 녹음으로 확인했다(정보 붙는 경로, 연락처에 없는 번호는 name 없음)
 
-## 폰에 넣은 것 (통화녹음전송 플로우)
+## 폰에 넣은 것 (2. Call recording upload 플로우)
 
 `4 Monitor file → 6 Delay 5s → 5 Content query → 3 HTTP request → 4`
 
@@ -62,7 +62,7 @@ POST /v1/ingest/calls?filename=<파일명>&direction=<incoming|outgoing|unknown>
 
 ## 폰 작업 (맥의 Claude에게 요청. VPS에서는 불가)
 
-대상: Automate `통화녹음전송` 플로우, 블록 3(`POST /v1/ingest/calls?filename=`).
+대상: Automate `2. Call recording upload` 플로우, 블록 3(`POST /v1/ingest/calls?filename=`).
 
 1. Automate 앱에 통화 기록 읽기 권한(`READ_CALL_LOG`)이 있는지 확인한다. 없으면 허용한다.
 2. 블록 3 앞에 **Content query** 블록을 넣는다.

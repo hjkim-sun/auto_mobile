@@ -1,6 +1,6 @@
 # 카카오톡 메시지 전송
 
-상태: 진행 중(2026-10-21). 서버 `POST /v1/ingest/kakao`, 폰 `KakaoTalk forward` 플로우
+상태: 진행 중(2026-10-21). 서버 `POST /v1/ingest/kakao`, 폰 `3. KakaoTalk forward` 플로우
 
 ## 조사 결과 (맥에서 adb로 확인)
 

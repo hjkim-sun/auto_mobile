@@ -32,11 +32,11 @@ API, 저장 경로, 실행 방법은 README.md에 정리돼 있다.
 
 | 플로우 | 블록 | 요청 |
 |---|---|---|
-| SMS MMS forward | 10 (SMS 본문) | `POST /v1/ingest/messages` |
-| SMS MMS forward | 16 (MMS 본문) | `POST /v1/ingest/messages` |
-| 통화녹음전송 | 3 | `POST /v1/ingest/calls?filename=&direction=&number=&name=&call_date=` |
-| KakaoTalk forward | 3 | `POST /v1/ingest/kakao` (블록 2 `Notification posted?`: 패키지 `com.kakao.talk`, 채널 `new_message_v6`, Exclude flags `Group summary`) |
-| Call brief | 5 | `POST /v1/brief/call?number=&name=` (블록 2 `Call incoming` → 4 `Fork`: NEW 는 3 `Content query`(phone_lookup 으로 연락처 이름) → 5 → 7 `Dialog web?`(HTML page `jsonDecode(brief)["html"]`, Regular expression `.*`(OK 버튼 활성), Timeout 45초, Show window directly: 전화 화면 위에 큰 카드) → YES·NO 모두 6 `Notification show`(채널 `Call brief`, High, Proceed `When dismissed`: fiber 가 끝나면 알림이 지워지므로 닫을 때까지 기다린다), OK 는 2 로 돌아가 다음 전화를 기다린다) |
+| 1. SMS MMS forward | 10 (SMS 본문) | `POST /v1/ingest/messages` |
+| 1. SMS MMS forward | 16 (MMS 본문) | `POST /v1/ingest/messages` |
+| 2. Call recording upload | 3 | `POST /v1/ingest/calls?filename=&direction=&number=&name=&call_date=` (1 → 4 `File monitor`(`Recordings/Call`, Writable file closed → `path`) → 6 `Delay` 5초(통화기록이 들어올 때까지) → 5 `Content query`(`call_log/calls` 수신·발신 최신 1건 → `calls`) → 3 → 4. 통화 종료가 3분 안인 통화기록만 direction 등을 붙인다) |
+| 3. KakaoTalk forward | 3 | `POST /v1/ingest/kakao` (블록 2 `Notification posted?`: 패키지 `com.kakao.talk`, 채널 `new_message_v6`, Exclude flags `Group summary`) |
+| 4. Call brief | 5 | `POST /v1/brief/call?number=&name=` (블록 2 `Call incoming` → 4 `Fork`: NEW 는 3 `Content query`(phone_lookup 으로 연락처 이름) → 5 → 7 `Dialog web?`(HTML page `jsonDecode(brief)["html"]`, Regular expression `.*`(OK 버튼 활성), Timeout 45초, Show window directly: 전화 화면 위에 큰 카드) → YES·NO 모두 6 `Notification show`(채널 `Call brief`, High, Proceed `When dismissed`: fiber 가 끝나면 알림이 지워지므로 닫을 때까지 기다린다), OK 는 2 로 돌아가 다음 전화를 기다린다) |
 
 MMS 첨부 전송(`PUT .../attachments/...`)은 2026-10-21 플로우에서 뺐다. 서버 엔드포인트는 남아 있다.
 
@@ -56,7 +56,7 @@ VPS의 Claude가 지켜야 할 것:
 - `./shot.sh`로 화면을 캡처한다(`shots/cur.png`, git 제외). `./ui.sh`로 UI 요소를 덤프한다.
 - 블록 편집 화면에서는 `./ui.py dump`로 행을 보고 `./ui.py set <행> <값> [fx]`로 입력한 뒤 `./ui.py tap SAVE`로 저장한다.
 - `./goto.sh <블록번호>`로 플로우차트에서 블록으로 이동한다. 이동한 블록은 대개 (540, 796) 근처에 오지만, 차트 끝 블록은 가운데로 오지 않으므로 캡처해서 위치를 확인한다.
-- 실행 중인 플로우를 편집하면 플로우가 멈춘다("Stopped by user"). 편집을 마치면 플로우 화면에서 START로 다시 시작하고, 목록에서 `running fibers` 아이콘으로 확인한다.
+- 실행 중인 플로우를 편집하면 플로우가 멈춘다("Stopped by user"). 블록을 열어 보기만 하고 나와도 멈출 수 있다. 플로우 이름(제목 탭 → Title)만 바꾸는 것은 멈추지 않는다. 편집을 마치면 플로우 화면에서 START로 다시 시작하고, 목록에서 `running fibers` 아이콘으로 확인한다.
 - 편집기 밖에서 `goto.sh`를 실행하면 플로우 메뉴(Duplicate/Delete)가 열린다. Delete를 누르지 않게 주의한다.
 - 블록 편집 화면에서 `BACK`을 연달아 보내면 편집기와 플로우 화면까지 빠져나간다. 블록을 닫을 때는 `./ui.py tap 'Navigate up'`을 한 번만 쓴다.
 - 연결선을 끌 때 시작점이나 끝점이 화면 가장자리(x<100, x>980)에 있으면 캔버스가 스크롤돼 엉뚱한 곳에 떨어지고, 이미 있던 연결이 끊긴다("Deleted 1 connections"). 블록을 먼저 화면 가운데로 옮긴 뒤 끈다. 끊겼으면 툴바 Undo로 되돌린다.
