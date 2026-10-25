@@ -122,7 +122,8 @@ payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단�
   같은 번호의 통화 전사문(최근 `BRIEF_CALLS` 3건, 건마다 600자). `claude -p`(`BRIEF_MODEL` sonnet, `BRIEF_EFFORT` low, 도구 없음,
   `prompts/call_brief.md`)로 최근 주제를 3줄 요약한다. 대화가 없으면 claude 를 부르지 않는다.
 - 응답은 `{"title": "📞 홍길동", "text": 3줄 요약, "sms", "kakao", "calls", "elapsed", "summarized_at", "html"}` 이다.
-  폰은 `html`(큰 글씨 카드)을 Dialog web 으로 전화 화면 위에 띄우고, 닫으면 `text` 를 알림으로 남긴다.
+  폰은 `html`(카드. 틀은 `app/web/call_card.html`)을 Dialog web 으로 전화 화면 위에 띄우고, 닫으면 `text` 를 알림으로 남긴다.
+  창 크기와 위치, CANCEL 버튼은 Automate 가 정해 바꿀 수 없다. 카드를 누르면 닫힌다.
   아직 요약이 없는 사람이면 그때 요약하고(4초 안팎) `summarized_at` 은 null 이다. 이때 실패하면 "요약 실패." 를 돌려준다.
 문자는 폰이 받은 문자만 보내므로 내가 보낸 문자는 요약에 없다.
 

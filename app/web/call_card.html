@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 전화 수신 브리핑 카드. 폰 Automate Dialog web 블록이 전화 화면 위에 띄운다 (app/services/call_brief.py card()) -->
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0b1020; }
+  body {
+    position: relative; overflow: hidden;
+    padding: 20px 18px 16px;
+    color: #eef2ff;
+    font-family: -apple-system, "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+    background:
+      radial-gradient(120% 80% at 100% 0%, rgba(124, 92, 255, .35), transparent 60%),
+      radial-gradient(90% 70% at 0% 100%, rgba(0, 200, 190, .22), transparent 60%),
+      #0b1020;
+  }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .avatar {
+    flex: none; width: 54px; height: 54px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 24px; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, #7c5cff, #00c8be);
+    box-shadow: 0 0 0 0 rgba(124, 92, 255, .6);
+    animation: ring 1.6s ease-out infinite;
+  }
+  .who { min-width: 0; }
+  .name { font-size: 25px; font-weight: 800; letter-spacing: -.3px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .label { margin-top: 3px; font-size: 13px; color: #a5b4fc; letter-spacing: .4px; }
+  .label b { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%;
+             background: #34d399; vertical-align: 1px; animation: blink 1s ease-in-out infinite; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li {
+    display: flex; gap: 12px; align-items: flex-start;
+    margin-bottom: 9px; padding: 11px 13px;
+    font-size: 18px; line-height: 1.4; font-weight: 600;
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 14px;
+    opacity: 0; transform: translateY(8px);
+    animation: up .45s ease-out forwards;
+  }
+  li:nth-child(2) { animation-delay: .12s; }
+  li:nth-child(3) { animation-delay: .24s; }
+  li i {
+    flex: none; width: 24px; height: 24px; margin-top: 1px; border-radius: 8px;
+    display: grid; place-items: center;
+    font-style: normal; font-size: 13px; font-weight: 800; color: #0b1020;
+    background: linear-gradient(135deg, #a5b4fc, #5eead4);
+  }
+  footer { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+  .chip { padding: 4px 9px; border-radius: 999px; font-size: 12px; color: #c7d2fe;
+          background: rgba(255, 255, 255, .07); }
+  .when { margin-left: auto; font-size: 12px; color: #7c86a8; }
+  @keyframes up { to { opacity: 1; transform: none; } }
+  @keyframes blink { 50% { opacity: .25; } }
+  @keyframes ring { 70% { box-shadow: 0 0 0 12px rgba(124, 92, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(124, 92, 255, 0); } }
+</style>
+</head>
+<!-- 카드를 누르면 닫는다. http://localhost/ok 는 Dialog web 이 가로채 YES 로 닫는 주소다 -->
+<body onclick="location.href='http://localhost/ok'">
+<header>
+  <div class="avatar">$initial</div>
+  <div class="who">
+    <div class="name">$name</div>
+    <div class="label"><b></b>전화 오는 중 · 최근 대화 요약</div>
+  </div>
+</header>
+<ol>$items</ol>
+<footer>
+  <span class="chip">💬 카톡 $kakao</span>
+  <span class="chip">✉️ 문자 $sms</span>
+  <span class="chip">📞 통화 $calls</span>
+  <span class="when">$when</span>
+</footer>
+</body>
+</html>

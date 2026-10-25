@@ -146,7 +146,8 @@ def test_brief_returns_saved_summary_without_claude(client, asked):
     body = client.post("/v1/brief/call", params={"number": "01012345678", "name": "홍길동, 010-1234-5678"}).json()
     assert body["text"] == "• 내일 7시 강남역 약속" and body["kakao"] == 3
     assert body["summarized_at"] is not None and len(asked) == 1
-    assert "<h1>📞 홍길동</h1><p>• 내일 7시 강남역 약속</p>" in body["html"] and "카톡 3 · 문자 0 · 통화 0" in body["html"]
+    assert '<div class="name">홍길동</div>' in body["html"] and "<li><i>1</i><span>내일 7시 강남역 약속</span></li>" in body["html"]
+    assert "카톡 3<" in body["html"] and "기준" in body["html"]
 
 
 def test_refresh_failure_keeps_person_updated(client, monkeypatch):

@@ -36,7 +36,7 @@ API, 저장 경로, 실행 방법은 README.md에 정리돼 있다.
 | SMS MMS forward | 16 (MMS 본문) | `POST /v1/ingest/messages` |
 | 통화녹음전송 | 3 | `POST /v1/ingest/calls?filename=&direction=&number=&name=&call_date=` |
 | KakaoTalk forward | 3 | `POST /v1/ingest/kakao` (블록 2 `Notification posted?`: 패키지 `com.kakao.talk`, 채널 `new_message_v6`, Exclude flags `Group summary`) |
-| Call brief | 5 | `POST /v1/brief/call?number=&name=` (블록 2 `Call incoming` → 4 `Fork`: NEW 는 3 `Content query`(phone_lookup 으로 연락처 이름) → 5 → 7 `Dialog web?`(HTML page `jsonDecode(brief)["html"]`, Timeout 45초, Show window directly: 전화 화면 위에 큰 카드) → YES·NO 모두 6 `Notification show`(채널 `Call brief`, High, Proceed `When dismissed`: fiber 가 끝나면 알림이 지워지므로 닫을 때까지 기다린다), OK 는 2 로 돌아가 다음 전화를 기다린다) |
+| Call brief | 5 | `POST /v1/brief/call?number=&name=` (블록 2 `Call incoming` → 4 `Fork`: NEW 는 3 `Content query`(phone_lookup 으로 연락처 이름) → 5 → 7 `Dialog web?`(HTML page `jsonDecode(brief)["html"]`, Regular expression `.*`(OK 버튼 활성), Timeout 45초, Show window directly: 전화 화면 위에 큰 카드) → YES·NO 모두 6 `Notification show`(채널 `Call brief`, High, Proceed `When dismissed`: fiber 가 끝나면 알림이 지워지므로 닫을 때까지 기다린다), OK 는 2 로 돌아가 다음 전화를 기다린다) |
 
 MMS 첨부 전송(`PUT .../attachments/...`)은 2026-10-21 플로우에서 뺐다. 서버 엔드포인트는 남아 있다.
 
