@@ -130,6 +130,8 @@ class Settings(BaseSettings):
     # 전화 수신 브리핑 (app/services/call_brief.py). 전화 건 사람과의 최근 카톡·문자를 claude 로 3줄 요약한다.
     # 벨이 울리는 동안 답해야 하므로 빠른 모델을 쓰고 오래 걸리면 끊는다.
     brief_model: str = "haiku"
+    # 기본 effort 는 생각을 길게 해서(출력 1천여 토큰) 8~15초 걸린다. low 면 3초 안팎
+    brief_effort: str = "low"
     brief_prompt_path: Path = Path("prompts/call_brief.md")
     brief_timeout_seconds: float = Field(default=15, gt=0)
     # 이 기간 안의 대화만, 카톡·문자 각각 최근 이만큼까지 넣는다

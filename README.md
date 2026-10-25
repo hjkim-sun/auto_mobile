@@ -114,7 +114,7 @@ payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단�
 
 전화 수신 브리핑(`/v1/brief/call`)은 폰 Automate 가 전화가 올 때 부른다(`app/services/call_brief.py`).
 `number`(발신 번호)와 같은 번호의 문자, `name`(연락처 이름. 없으면 같은 번호의 지난 통화녹음에 붙은 이름)과의 1:1 카톡과 그 사람이 단톡방에서 쓴 말을
-`BRIEF_DAYS`(30일) 안에서 각각 최근 `BRIEF_MAX_MESSAGES`(40)건 모아 `claude -p`(`BRIEF_MODEL` haiku, 도구 없음,
+`BRIEF_DAYS`(30일) 안에서 각각 최근 `BRIEF_MAX_MESSAGES`(40)건 모아 `claude -p`(`BRIEF_MODEL` haiku, `BRIEF_EFFORT` low, 도구 없음,
 `prompts/call_brief.md`)로 최근 주제를 3줄 요약한다. 응답은 `{"title": "📞 홍길동", "text": 3줄 요약, "sms", "kakao", "elapsed"}`
 이고 폰이 알림으로 띄운다. 대화가 없으면 claude 를 부르지 않고, 요약이 `BRIEF_TIMEOUT_SECONDS`(15초) 안에 안 끝나거나
 실패하면 마지막 대화 한 줄을 돌려준다. 미리 만들어 두지 않고 그때 요약한다(서버에서 3~5초).
