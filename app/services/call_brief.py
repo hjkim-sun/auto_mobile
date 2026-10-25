@@ -88,7 +88,8 @@ def summarize(name: str, conversation: list[str]) -> str:
                         f"지금: {datetime.now(s.tz):%Y-%m-%d %H:%M}", f"전화 건 사람: {name}", "",
                         "<conversation>", *conversation, "</conversation>"])
     cmd = [str(s.wiki_claude_path), "-p", "--safe-mode", "--restricted", "--tools", "",
-           "--no-session-persistence", "--output-format", "json", "--model", s.brief_model, "--effort", s.brief_effort]
+           "--no-session-persistence", "--output-format", "json", "--model", s.brief_model, "--effort", s.brief_effort,
+           "--settings", '{"alwaysThinkingEnabled": false}']
     try:
         proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
                               timeout=s.brief_timeout_seconds, cwd=s.data_dir)
