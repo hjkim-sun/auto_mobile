@@ -8,7 +8,7 @@ import pytest
 from app.core.config import get_settings
 from app.db.session import connect, init_db
 from app.jobs import mail_poller
-from app.repositories import buzz_state, events, mail_cursors
+from app.repositories import buzz_state, events, mail_cursors, wiki_ingests
 from app.services.render import render
 
 
@@ -115,10 +115,12 @@ def test_sent_mailbox_is_polled_with_its_own_cursor(imap):
     assert mail_cursors.get("naver", "INBOX") == (100, 7)
     assert mail_cursors.get("naver", "Sent Messages") == (100, 4)
 
-    # 보낸 메일은 kept 여도 Buzz 로 알리지 않는다
+    # 보낸 메일은 판별 없이 바로 kept 로 들어가 위키 대상이 되고, Buzz 로는 알리지 않는다
+    sent_id = next(r["id"] for r in rows if "m-20" in r["payload"])
+    assert {r["id"]: r["status"] for r in rows}[sent_id] == "kept"
+    assert [r["id"] for r in wiki_ingests.not_ingested()] == [sent_id]
     with closing(connect()) as conn:
         conn.execute("UPDATE events SET status = 'kept'")
-    sent_id = next(r["id"] for r in rows if "m-20" in r["payload"])
     assert sent_id not in [r["id"] for r in buzz_state.unnotified_kept(0)]
     assert len(buzz_state.unnotified_kept(0)) == 2
     assert "보낸메일함" in render(next(r for r in rows if r["id"] == sent_id))

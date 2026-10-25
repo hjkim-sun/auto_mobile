@@ -301,4 +301,5 @@ def _store_email(tmp: Path, size: int, sha: str, account: str, sent: bool = Fals
                "from": str(mail.get("From") or ""), "to": str(mail.get("To") or ""),
                "subject": str(mail.get("Subject") or ""), "date": str(mail.get("Date") or ""),
                "size": size, "sha256": sha}
-    return _register("email", key, payload, path)
+    # 내가 보낸 메일은 판별하지 않고 바로 kept 로 넣는다. 위키 맥락으로만 쓰고 Buzz 로 알리지 않는다.
+    return _register("email", key, payload, path, status="kept" if sent else "pending")

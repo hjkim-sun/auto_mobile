@@ -161,7 +161,7 @@ MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "앱 비
 - 네이버 메일 환경설정 → POP3/IMAP 설정에서 IMAP 을 켜야 하고, 2단계 인증을 쓰면 애플리케이션 비밀번호를 넣는다.
 - 같은 메일이 두 계정에 다 오면 Message-ID 로 한 번만 저장되고, 먼저 가져온 계정 이름이 남는다.
 - 읽기 전용으로 열고 `BODY.PEEK` 로 가져오므로 메일이 읽음 처리되지 않는다.
-- 받은편지함(INBOX)과 보낸메일함을 가져온다. 보낸메일함은 IMAP LIST 의 `\Sent` 표시로 찾는다(네이버 `Sent Messages`, Gmail `[Gmail]/Sent Mail`). 보낸메일함에서 온 메일은 `payload.sent` 가 true 이고, 판별·위키에는 "보낸메일함 (사용자가 보낸 메일)"로 표시되며, kept 여도 Buzz 로 알리지 않는다.
+- 받은편지함(INBOX)과 보낸메일함을 가져온다. 보낸메일함은 IMAP LIST 의 `\Sent` 표시로 찾는다(네이버 `Sent Messages`, Gmail `[Gmail]/Sent Mail`). 보낸메일함에서 온 메일은 `payload.sent` 가 true 이고, 판별하지 않고 바로 kept 로 들어가 위키에만 쓰인다("보낸메일함 (사용자가 보낸 메일)"로 표시). Buzz 로 알리지 않는다.
 - 마지막으로 가져온 UID 를 메일함별로 `mail_cursors` 테이블에 남겨 다음 폴링은 그 뒤부터 가져온다.
 - 처음이거나 서버의 UIDVALIDITY 가 바뀌면 `MAIL_BACKFILL_DAYS`(기본 1)일 전부터 다시 가져온다. 중복은 Message-ID 로 걸러진다.
   네이버는 UIDVALIDITY 를 항상 0 으로 준다. 그래도 UID 는 계속 늘어나므로 커서는 그대로 동작한다.
