@@ -1,16 +1,18 @@
-"""전화가 오면 그 사람과 나눈 카톡·문자를 모아 최근 주제를 3줄로 요약한다 (POST /v1/brief/call).
+"""전화가 오면 그 사람과 나눈 카톡·문자·통화의 최근 주제 3줄 요약을 돌려준다 (POST /v1/brief/call).
 
 폰 Automate 가 전화 수신을 잡아 발신 번호와 연락처 이름을 보내고, 응답의 text 를 안드로이드 알림으로 띄운다.
-벨이 울리는 동안 답해야 하므로 미리 만들어 두지 않고 그때 claude -p(BRIEF_MODEL, 도구 없음)로 요약한다.
+요약은 미리 만들어 둔다(call_briefs 테이블). 카톡·문자·통화가 들어오면 그 사람의 is_updated 를 켜고,
+워커의 brief 스레드가 BRIEF_REFRESH_SECONDS 마다 is_updated 인 사람만 claude -p(BRIEF_MODEL, 도구 없음)로 다시 요약한다.
+전화가 오면 저장된 요약을 바로 돌려주고, 아직 요약이 없는 사람만 그때 요약한다.
 - 문자: events 의 message 중 발신 번호(from)가 같은 것. 번호는 숫자만 남기고 +82 를 0 으로 바꿔 비교한다.
-- 카톡: rooms.json 의 1:1 방 중 이름이 연락처 이름과 같은 방(이름이 없으면 같은 번호의 지난 통화녹음에 붙은 이름), 그리고 그 사람이 참여한 단톡방에서 그 사람이 쓴 말.
-BRIEF_DAYS 안의 것만, 각각 최근 BRIEF_MAX_MESSAGES 건까지 넣는다. 대화가 없으면 claude 를 부르지 않는다.
+- 카톡: rooms.json 의 1:1 방 중 이름이 그 사람 이름과 같은 방, 그리고 그 사람이 참여한 단톡방에서 그 사람이 쓴 말.
+- 통화: events 의 call 중 번호가 같은 것의 전사문 (최근 BRIEF_CALLS 건, 건마다 앞부분만).
+BRIEF_DAYS 안의 것만, 문자·카톡은 각각 최근 BRIEF_MAX_MESSAGES 건까지 넣는다. 대화가 없으면 claude 를 부르지 않는다.
 """
 from __future__ import annotations
 
 import json
 import logging
-import re
 import subprocess
 import time
 from contextlib import closing
@@ -18,32 +20,24 @@ from datetime import datetime, timedelta
 
 from app.core.config import get_settings
 from app.db.session import connect
+from app.repositories import call_briefs
+from app.repositories.call_briefs import clean_name, normalize_number
 from app.services import kakao_history
+from app.services.render import call_transcript
 
 logger = logging.getLogger(__name__)
 
 GROUP_MESSAGES = 10   # 단톡방에서 그 사람이 쓴 말은 이만큼만 넣는다
+CALL_CHARS = 600      # 통화 전사문은 건마다 이만큼만 넣는다
 
 
 class BriefError(RuntimeError):
     pass
 
 
-def normalize_number(number: str | None) -> str:
-    digits = re.sub(r"\D", "", number or "")
-    return "0" + digits[2:] if digits.startswith("82") and len(digits) > 9 else digits
-
-
-def name_for_number(number: str) -> str:
-    """폰이 이름을 못 보냈을 때, 같은 번호의 지난 통화녹음에 붙은 연락처 이름."""
-    target = normalize_number(number)
-    if not target:
-        return ""
-    with closing(connect()) as conn:
-        rows = conn.execute("SELECT json_extract(payload, '$.number') AS number, json_extract(payload, '$.name') AS name"
-                            " FROM events WHERE source = 'call' AND json_extract(payload, '$.name') IS NOT NULL"
-                            " ORDER BY id DESC LIMIT 2000").fetchall()
-    return next((r["name"] for r in rows if normalize_number(r["number"]) == target), "")
+def since() -> str:
+    s = get_settings()
+    return (datetime.now(s.tz) - timedelta(days=s.brief_days)).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def sms_lines(number: str, since: str, limit: int) -> list[str]:
@@ -82,6 +76,26 @@ def kakao_lines(name: str, since: str, limit: int) -> list[str]:
     return sorted(out)
 
 
+def call_lines(number: str, since: str, limit: int) -> list[str]:
+    """번호가 number 인 통화녹음의 전사문 (오래된 것부터). 전사가 끝나지 않은 통화는 뺀다."""
+    target = normalize_number(number)
+    if not target:
+        return []
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT * FROM events WHERE source = 'call' ORDER BY id DESC LIMIT 2000").fetchall()
+    out = []
+    for row in rows:
+        call = json.loads(row["payload"])
+        when = call.get("call_date_text") or ""
+        if normalize_number(call.get("number")) != target or when < since:
+            continue
+        if text := " / ".join((call_transcript(row) or "").split("\n")).strip(" /"):
+            out.append(f"{when[:16]} 통화: {text[:CALL_CHARS]}")
+            if len(out) >= limit:
+                break
+    return sorted(out)
+
+
 def summarize(name: str, conversation: list[str]) -> str:
     s = get_settings()
     prompt = "\n".join([s.brief_prompt_path.read_text(encoding="utf-8"), "",
@@ -103,25 +117,72 @@ def summarize(name: str, conversation: list[str]) -> str:
     return out["result"].strip()
 
 
-def brief(number: str | None, name: str | None) -> dict:
-    """{title, text, sms, kakao, elapsed}. text 는 알림 본문(3줄 요약)이다."""
+def make_brief(name: str, number: str, who: str) -> dict:
+    """{text, sms, kakao, calls}. 요약이 실패하면 BriefError."""
     s = get_settings()
-    started = time.monotonic()
-    # 폰 Content query 는 "이름, 010-1234-5678" 처럼 번호를 붙여 보낸다
-    name = re.sub(r",\s*[+\d][\d\s()-]*$", "", (name or "").strip()) or name_for_number(number or "")
-    who = name or (number or "").strip() or "모르는 번호"
-    since = (datetime.now(s.tz) - timedelta(days=s.brief_days)).strftime("%Y-%m-%d %H:%M:%S")
-    sms = sms_lines(number or "", since, s.brief_max_messages)
-    kakao = kakao_lines(name, since, s.brief_max_messages)
-    if not sms and not kakao:
-        text = f"최근 {s.brief_days}일 동안 나눈 카톡·문자가 없다."
+    start = since()
+    sms = sms_lines(number, start, s.brief_max_messages)
+    kakao = kakao_lines(name, start, s.brief_max_messages)
+    calls = call_lines(number, start, s.brief_calls)
+    if not sms and not kakao and not calls:
+        text = f"최근 {s.brief_days}일 동안 나눈 카톡·문자·통화가 없다."
     else:
+        text = summarize(who, sorted(sms + kakao + calls))
+    return {"text": text, "sms": len(sms), "kakao": len(kakao), "calls": len(calls)}
+
+
+def refresh() -> int:
+    """is_updated 인 사람의 요약을 다시 만든다. 다시 만든 사람 수."""
+    done = 0
+    for row in call_briefs.claim_updated():
+        name = "" if row["person"] == row["number"] else row["person"]
         try:
-            text = summarize(who, sorted(sms + kakao))
+            b = make_brief(name, row["number"] or "", row["person"])
+        except Exception:
+            logger.exception("call brief for %s failed", row["person"])
+            call_briefs.unclaim(row["person"])
+            continue
+        call_briefs.save(row["person"], b["text"], b["sms"], b["kakao"], b["calls"])
+        done += 1
+    return done
+
+
+def seed() -> int:
+    """BRIEF_DAYS 안에 대화가 있는 사람을 모두 is_updated 로 둔다. 브리핑이 하나도 없을 때(처음 띄울 때) 부른다."""
+    start = since()
+    people = set()
+    for room in kakao_history.load_rooms().values():
+        rows = kakao_history.read_rows(kakao_history.kakao_dir() / room["file"])
+        if room["kind"] == "personal" and rows and max(r[0] for r in rows) >= start:
+            people.add(call_briefs.mark(name=room["name"]))
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT source, payload FROM events WHERE source IN ('call', 'message')"
+                            " ORDER BY id").fetchall()
+    for row in rows:
+        p = json.loads(row["payload"])
+        if row["source"] == "call" and (p.get("call_date_text") or "") >= start:
+            people.add(call_briefs.mark(p.get("name"), p.get("number")))
+        elif row["source"] == "message" and (p.get("date_text") or "") >= start:
+            people.add(call_briefs.mark(number=p.get("from")))
+    return len(people - {None})
+
+
+def brief(number: str | None, name: str | None) -> dict:
+    """{title, text, sms, kakao, calls, elapsed, summarized_at}. text 는 알림 본문(3줄 요약)이다."""
+    started = time.monotonic()
+    name = clean_name(name) or call_briefs.name_for_number(number or "")
+    who = name or (number or "").strip() or "모르는 번호"
+    row = call_briefs.find(name, number)
+    if row is not None and row["summary"]:
+        b = {"text": row["summary"], "sms": row["sms"], "kakao": row["kakao"], "calls": row["calls"]}
+        summarized_at = row["summarized_at"]
+    else:   # 아직 요약이 없는 사람 (처음 연락한 뒤 요약 배치가 아직 안 돌았거나 대화가 없음)
+        summarized_at = None
+        try:
+            b = make_brief(name, number or "", who)
         except BriefError as e:
             logger.warning("call brief for %s failed: %s", who, e)
-            last = sorted(sms + kakao)[-1]
-            text = f"요약 실패. 마지막 대화: {last[:120]}"
+            b = {"text": "요약 실패.", "sms": 0, "kakao": 0, "calls": 0}
     elapsed = round(time.monotonic() - started, 2)
-    logger.info("call brief for %s: sms=%d kakao=%d %.2fs", who, len(sms), len(kakao), elapsed)
-    return {"title": f"📞 {who}", "text": text, "sms": len(sms), "kakao": len(kakao), "elapsed": elapsed}
+    logger.info("call brief for %s: cached=%s %.2fs", who, summarized_at is not None, elapsed)
+    return {"title": f"📞 {who}", **b, "elapsed": elapsed, "summarized_at": summarized_at}

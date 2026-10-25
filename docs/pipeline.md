@@ -140,10 +140,13 @@ sequenceDiagram
     B->>U: DM 답장
 
     Note over C,L: 4-1. 전화 수신 브리핑 (전화 수신 브리핑 플로우, app/services/call_brief.py)
+    A->>S: 문자 수신, 카톡 저장(맥 kakaocli·폰 알림), 통화 전사 완료 때 그 사람의 call_briefs.is_updated = 1<br/>(사람은 이름으로 묶음. 이름 모르는 번호는 번호로 두고 통화녹음으로 이름을 알면 합침. 단톡방 말은 브리핑이 있는 사람만)
+    W->>S: 30분마다 is_updated = 1 인 사람만 꺼내 0 으로 돌림 (테이블이 비어 있으면 최근 30일 대화 상대를 모두 넣고 시작)
+    W->>S: 같은 번호의 문자, 이름이 같은 1:1 카톡 방과 그 사람이 단톡방에서 쓴 말(최근 30일, 각각 40건), 같은 번호의 통화 전사문(최근 3건)
+    W->>L: claude -p (sonnet, effort low, 도구 없음) 3줄 요약 → call_briefs.summary. 실패하면 is_updated = 1 로 되돌림
     C->>A: 전화가 오면 POST /v1/brief/call?number=&name=
-    A->>S: 같은 번호의 문자(events), 이름이 같은 1:1 카톡 방과 그 사람이 단톡방에서 쓴 말(방 CSV)<br/>최근 30일, 각각 40건까지
-    A->>L: claude -p (sonnet, effort low, 도구 없음) 3줄 요약. 대화가 없으면 부르지 않음
-    A-->>C: {title, text} → 폰이 안드로이드 알림으로 띄움(사용자가 닫을 때까지 fiber 가 기다림. 끝나면 Automate 가 알림을 지운다)<br/>15초 안에 못 끝내면 마지막 대화 한 줄
+    A->>S: 이름 또는 번호로 call_briefs 조회
+    A-->>C: {title, text, summarized_at} 저장된 요약을 바로 줌. 요약이 없는 사람만 그때 요약(4초 안팎)<br/>폰이 안드로이드 알림으로 띄움(사용자가 닫을 때까지 fiber 가 기다림. 끝나면 Automate 가 알림을 지운다)
 
     Note over C,S: 5. 조회
     C->>A: GET /v1/verdicts/messages

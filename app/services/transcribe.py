@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.repositories import events, transcriptions
+from app.repositories import call_briefs, events, transcriptions
 from app.services.ingest import IngestError
 
 log = logging.getLogger(__name__)
@@ -155,6 +155,7 @@ def _run(job_id: int) -> None:
         transcriptions.finish(job_id, text_path, duration)
     # 통화 이벤트였다면 이제 워커가 전사문으로 판별한다 (실패했으면 전사 없이)
     events.release_transcribed(job["input_path"])
+    call_briefs.mark_call(job["input_path"])   # 전화 수신 브리핑에 이 통화를 넣게 한다
 
 
 def transcribe_file(input_path: str, output_dir: str, language: str | None) -> tuple[str, float]:

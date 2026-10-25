@@ -77,6 +77,19 @@ CREATE TABLE IF NOT EXISTS calendar_items (  -- 위키 빌더가 고른 캘린�
     updated_at   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS call_briefs (     -- 전화 수신 브리핑. 사람별로 미리 만들어 둔 최근 대화 3줄 요약
+    person        TEXT PRIMARY KEY,        -- 연락처·카톡 이름. 이름을 모르면 번호(숫자만)
+    number        TEXT,                    -- 숫자만. 모르면 NULL
+    is_updated    INTEGER NOT NULL DEFAULT 1,  -- 마지막 요약 뒤에 카톡·문자·통화가 들어왔으면 1. 요약 배치가 1 인 사람만 다시 요약한다
+    summary       TEXT,
+    sms           INTEGER,                 -- 요약에 넣은 문자 수
+    kakao         INTEGER,                 -- 요약에 넣은 카톡 수
+    calls         INTEGER,                 -- 요약에 넣은 통화 수
+    updated_at    TEXT NOT NULL,           -- 마지막으로 is_updated 를 켠 시각
+    summarized_at TEXT
+);
+CREATE INDEX IF NOT EXISTS call_briefs_number ON call_briefs (number);
+
 CREATE TABLE IF NOT EXISTS agent_turns (     -- Buzz 에이전트가 답한 말. 웹 흐름 화면(/web/flow)에 보여 준다
     id           INTEGER PRIMARY KEY,
     channel      TEXT NOT NULL,

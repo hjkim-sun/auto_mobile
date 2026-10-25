@@ -127,8 +127,9 @@ class Settings(BaseSettings):
     # kept 알림을 원문 그대로 보내지 않고, 에이전트가 위키에서 맥락을 찾아 비서처럼 브리핑한다.
     agent_briefing: bool = True
 
-    # 전화 수신 브리핑 (app/services/call_brief.py). 전화 건 사람과의 최근 카톡·문자를 claude 로 3줄 요약한다.
-    # 벨이 울리는 동안 답해야 하므로 빠른 모델을 쓰고 오래 걸리면 끊는다.
+    # 전화 수신 브리핑 (app/services/call_brief.py). 사람별 최근 카톡·문자·통화를 claude 로 3줄 요약해 두고 전화가 오면 바로 준다.
+    # 워커가 이 주기마다 새 대화가 들어온 사람(call_briefs.is_updated)만 다시 요약한다
+    brief_refresh_seconds: float = Field(default=1800, gt=0)
     # haiku 는 effort low 에 생각을 꺼도 생각을 길게 하는 때가 많아(출력 1천여 토큰) 7~10초 걸린다. sonnet low 는 4초 안팎
     brief_model: str = "sonnet"
     brief_effort: str = "low"
@@ -137,6 +138,7 @@ class Settings(BaseSettings):
     # 이 기간 안의 대화만, 카톡·문자 각각 최근 이만큼까지 넣는다
     brief_days: int = Field(default=30, ge=1)
     brief_max_messages: int = Field(default=40, ge=1)
+    brief_calls: int = Field(default=3, ge=0)   # 통화 전사문은 최근 이만큼
 
     # 네이버 캘린더 (CalDAV). 위키 빌더가 고른 일정을 넣는다. 계정은 MAIL_ACCOUNTS 의 name 으로 고르고,
     # 비우면 첫 번째 네이버 계정을 쓴다. 메일과 같은 애플리케이션 비밀번호로 로그인된다.

@@ -18,7 +18,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.core.config import get_settings
-from app.repositories import events
+from app.repositories import call_briefs, events
 from app.services.email_parse import date_text, write_parsed
 
 log = logging.getLogger(__name__)
@@ -194,7 +194,10 @@ def ingest_message(body: bytes) -> tuple[int, bool]:
     path = settings.raw_dir / "messages" / day_folder(msg["date_text"] or msg["received_at"]) / f"{key}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(msg, ensure_ascii=False, indent=2), encoding="utf-8")
-    return _register("message", f"message:{key}", msg, path, delay=settings.message_settle_seconds)
+    result = _register("message", f"message:{key}", msg, path, delay=settings.message_settle_seconds)
+    if result[1]:
+        call_briefs.mark(number=msg.get("from"))   # 전화 수신 브리핑을 다시 만들게 한다
+    return result
 
 
 def kakao_message(note: dict) -> dict | None:

@@ -113,11 +113,16 @@ payload 는 `sender`(ticker 의 "보낸사람 : 본문" 앞부분), `group`(단�
 모델 파일(`DIARIZATION_SEGMENTATION_MODEL`, `DIARIZATION_EMBEDDING_MODEL`)이 없거나 화자 분리가 실패하면 화자 없이 저장한다.
 
 전화 수신 브리핑(`/v1/brief/call`)은 폰 Automate 가 전화가 올 때 부른다(`app/services/call_brief.py`).
-`number`(발신 번호)와 같은 번호의 문자, `name`(연락처 이름. 없으면 같은 번호의 지난 통화녹음에 붙은 이름)과의 1:1 카톡과 그 사람이 단톡방에서 쓴 말을
-`BRIEF_DAYS`(30일) 안에서 각각 최근 `BRIEF_MAX_MESSAGES`(40)건 모아 `claude -p`(`BRIEF_MODEL` sonnet, `BRIEF_EFFORT` low, 도구 없음,
-`prompts/call_brief.md`)로 최근 주제를 3줄 요약한다. 응답은 `{"title": "📞 홍길동", "text": 3줄 요약, "sms", "kakao", "elapsed"}`
-이고 폰이 알림으로 띄운다. 대화가 없으면 claude 를 부르지 않고, 요약이 `BRIEF_TIMEOUT_SECONDS`(15초) 안에 안 끝나거나
-실패하면 마지막 대화 한 줄을 돌려준다. 미리 만들어 두지 않고 그때 요약한다(서버에서 4초 안팎).
+요약은 사람별로 미리 만들어 `call_briefs` 테이블에 둔다. 전화가 오면 저장된 요약을 바로 돌려준다(서버에서 0.1초 안쪽).
+- 문자·카톡·통화(전사가 끝난 때)가 들어오면 그 사람의 `is_updated` 를 1 로 둔다. 사람은 이름으로 묶고, 이름을 모르는 번호는 번호로 두었다가
+  같은 번호의 통화녹음으로 이름을 알게 되면 이름 쪽에 합친다. 단톡방 말은 이미 브리핑이 있는 사람만 표시한다.
+- 워커의 brief 스레드가 `BRIEF_REFRESH_SECONDS`(30분)마다 `is_updated=1` 인 사람만 다시 요약하고 0 으로 돌린다. 실패하면 1 로 남겨 다음에 다시 한다.
+  테이블이 비어 있으면(처음 띄울 때) `BRIEF_DAYS` 안에 대화가 있는 사람을 모두 넣고 시작한다.
+- 요약에 넣는 것: 같은 번호의 문자, 이름이 같은 1:1 카톡과 그 사람이 단톡방에서 쓴 말(`BRIEF_DAYS` 30일 안, 각각 최근 `BRIEF_MAX_MESSAGES` 40건),
+  같은 번호의 통화 전사문(최근 `BRIEF_CALLS` 3건, 건마다 600자). `claude -p`(`BRIEF_MODEL` sonnet, `BRIEF_EFFORT` low, 도구 없음,
+  `prompts/call_brief.md`)로 최근 주제를 3줄 요약한다. 대화가 없으면 claude 를 부르지 않는다.
+- 응답은 `{"title": "📞 홍길동", "text": 3줄 요약, "sms", "kakao", "calls", "elapsed", "summarized_at"}` 이고 폰이 알림으로 띄운다.
+  아직 요약이 없는 사람이면 그때 요약하고(4초 안팎) `summarized_at` 은 null 이다. 이때 실패하면 "요약 실패." 를 돌려준다.
 문자는 폰이 받은 문자만 보내므로 내가 보낸 문자는 요약에 없다.
 
 `/v1/health` 를 뺀 모든 API 는 `Authorization: Bearer <INGEST_TOKEN>` 이 필요하다.

@@ -32,6 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.repositories import call_briefs
 from app.schemas.ingest import KakaoHistory
 from app.services import jev
 from app.services.ingest import safe_name
@@ -99,11 +100,11 @@ def _write(path: Path, rows: list[list[str]]) -> None:
     tmp.replace(path)
 
 
-def _merge(path: Path, rows: list[list[str]]) -> int:
-    """rows 중 path 에 없는 메시지만 더하고 더한 수를 돌려준다. 같은 메시지는 log_id 가 512 안쪽인 것이다."""
+def _merge(path: Path, rows: list[list[str]]) -> list[list[str]]:
+    """rows 중 path 에 없는 메시지만 더하고 더한 행을 돌려준다. 같은 메시지는 log_id 가 512 안쪽인 것이다."""
     existing = sorted(read_rows(path), key=lambda r: int(r[3]))
     ids = [int(r[3]) for r in existing]
-    added = changed = 0
+    added, changed = [], 0
     for row in rows:
         row = row + [""] * (len(COLUMNS) - len(row))
         log_id = int(row[3])
@@ -116,10 +117,18 @@ def _merge(path: Path, rows: list[list[str]]) -> int:
             continue
         existing.insert(i, row)
         ids.insert(i, log_id)
-        added += 1
+        added.append(row)
     if added or changed:
         _write(path, existing)
     return added
+
+
+def _mark_briefs(room: dict, rows: list[list[str]]) -> None:
+    """새 카톡이 들어온 사람의 전화 수신 브리핑을 다시 만들게 한다. 단톡방은 이미 브리핑이 있는 사람만."""
+    if room["kind"] == "personal":
+        call_briefs.mark(name=room["name"])
+    else:
+        call_briefs.mark_existing({r[1] for r in rows} - {"나"})
 
 
 def _flag(room: dict, now: float, phone: bool = False) -> None:
@@ -153,9 +162,10 @@ def save_history(history: KakaoHistory) -> dict[str, int]:
             by_room.setdefault(str(m.chat_id), []).append([when, m.author, m.text, str(m.log_id)])
         added = 0
         for cid, rows in by_room.items():
-            if n := _merge(kakao_dir() / rooms[cid]["file"], rows):
+            if new := _merge(kakao_dir() / rooms[cid]["file"], rows):
                 _flag(rooms[cid], time.time())
-                added += n
+                _mark_briefs(rooms[cid], new)
+                added += len(new)
         _save_rooms(rooms)
     return {"rooms": len(history.rooms), "added": added,
             "duplicates": len(history.messages) - unknown - added, "unknown_room": unknown}
@@ -211,9 +221,10 @@ def file_notification(msg: dict, choose: Callable = choose_room) -> dict | None:
                 _save_rooms(rooms)
             result = {"chat_id": cid, "by": "personal"}
         result["file"] = rooms[result["chat_id"]]["file"] if result["chat_id"] else UNASSIGNED
-        if _merge(kakao_dir() / result["file"], [[when, sender, msg["text"], str(msg["chat_log_id"])]]) \
-                and result["chat_id"]:
+        new = _merge(kakao_dir() / result["file"], [[when, sender, msg["text"], str(msg["chat_log_id"])]])
+        if new and result["chat_id"]:
             _flag(rooms[result["chat_id"]], time.time(), phone=True)
+            _mark_briefs(rooms[result["chat_id"]], new)
             _save_rooms(rooms)
     return result
 

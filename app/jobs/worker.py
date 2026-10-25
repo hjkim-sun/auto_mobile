@@ -2,6 +2,7 @@
 
 카톡 알림은 방 CSV 에 넣고(status=filed) 방 단위 판단(app/services/kakao_judge.py)에 맡긴다.
 방 단위 판단은 이 프로세스의 스레드 하나가 KAKAO_JUDGE_POLL_SECONDS 마다 돌린다. 방을 모르는 알림만 하나씩 판별한다.
+전화 수신 브리핑도 스레드 하나가 BRIEF_REFRESH_SECONDS 마다 새 대화가 들어온 사람만 다시 요약한다(app/services/call_brief.py).
 반드시 1개 프로세스만 띄운다.
 실행: python -m app.jobs.worker [--once]
 """
@@ -15,8 +16,8 @@ import time
 
 from app.core.config import get_settings
 from app.db.session import init_db
-from app.repositories import events
-from app.services import kakao_history, kakao_judge
+from app.repositories import call_briefs, events
+from app.services import call_brief, kakao_history, kakao_judge
 from app.services.classify import classify_event
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,18 @@ def judge_loop() -> None:
         time.sleep(get_settings().kakao_judge_poll_seconds)
 
 
+def brief_loop() -> None:
+    if not call_briefs.any_brief() and (n := call_brief.seed()):
+        logger.info("seeded %d call briefs", n)
+    while True:
+        try:
+            if n := call_brief.refresh():
+                logger.info("refreshed %d call briefs", n)
+        except Exception:
+            logger.exception("call brief refresh failed")
+        time.sleep(get_settings().brief_refresh_seconds)
+
+
 def run(once: bool = False) -> None:
     settings = get_settings()
     init_db()
@@ -40,6 +53,8 @@ def run(once: bool = False) -> None:
     if settings.kakao_judge_enabled and not once:
         # Claude 판단은 수십 초 걸리므로 문자·메일 판별을 막지 않게 따로 돈다
         threading.Thread(target=judge_loop, name="kakao-judge", daemon=True).start()
+    if not once:
+        threading.Thread(target=brief_loop, name="call-brief", daemon=True).start()
     while True:
         event = events.claim_next()
         if event is None:
