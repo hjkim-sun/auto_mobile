@@ -133,7 +133,7 @@ nav a.on { background: var(--surface-2); color: var(--text); }
   <div class="body">
     <h3>자료가 들어온 곳</h3><div id="sources"></div>
     <h3>페이지</h3><div id="types"></div>
-    <p class="note">작은 별은 자료 한 건, 큰 행성은 사람·기관·주제다. 행성 색은 가장 많이 이어진 채널을 따른다.</p>
+    <p class="note">작은 별은 자료 한 건, 큰 행성은 사람·기관·주제다. 행성 색은 가장 많이 이어진 채널을 따른다. 채널을 끄면 그 채널에서만 자료가 들어온 페이지도 숨는다.</p>
   </div>
 </aside>
 
@@ -407,6 +407,8 @@ controls.autoRotate = true; controls.autoRotateSpeed = 0.45; controls.enableDamp
 function visible(n) {
   if (state.hiddenTypes.has(n.type)) return false;
   if (n.type === "source" && state.hiddenSources.has(n.source || "unknown")) return false;
+  // 사람·기관·주제는 이어진 자료의 채널이 모두 꺼졌으면 숨긴다. 자료와 이어지지 않은 페이지는 남긴다
+  if (n.channels?.length && n.channels.every(c => state.hiddenSources.has(c))) return false;
   return !n.added_at || Date.parse(n.added_at) <= state.until;
 }
 function apply() {
@@ -430,7 +432,7 @@ function apply() {
   renderStats(nodes, links);
 }
 
-// 사람·기관·주제 페이지 색: 이어진 자료가 가장 많이 들어온 채널
+// 사람·기관·주제 페이지에 이어진 자료의 채널별 개수 {id: {channel: n}}. 색은 가장 많은 채널을 따른다
 function channels(data) {
   const tally = new Map(), byId = new Map(data.nodes.map(n => [n.id, n]));
   for (const l of data.links) {
@@ -440,7 +442,7 @@ function channels(data) {
       const t = tally.get(x.id) || {}; t[y.source] = (t[y.source] || 0) + 1; tally.set(x.id, t);
     }
   }
-  return id => { const t = tally.get(id); return t ? Object.entries(t).sort((p, q) => q[1] - p[1])[0][0] : null; };
+  return tally;
 }
 
 function renderStats(nodes, links) {
@@ -495,6 +497,7 @@ async function open(id) {
   const n = state.byId.get(id);
   if (n && !fg.graphData().nodes.includes(n)) {   // 걸러진 노드면 보이게 한다
     state.hiddenTypes.delete(n.type); if (n.source) state.hiddenSources.delete(n.source);
+    if (n.channels.length && n.channels.every(c => state.hiddenSources.has(c))) state.hiddenSources.delete(n.channel);
     state.until = Infinity; setScrub(state.times.length); renderFilters(state.data); apply();
   }
   state.focus = n || null; highlight();
@@ -597,9 +600,11 @@ async function load(first) {
   const data = await res.json();
   state.data = data;
   if (first && (data.counts.source || 0) > MANY_SOURCES) state.hiddenTypes.add("source");
-  const channelOf = channels(data);
+  const tally = channels(data);
   for (const n of data.nodes) {
-    n.channel = n.type === "source" ? null : channelOf(n.id);
+    const t = n.type === "source" ? null : tally.get(n.id);
+    n.channel = t ? Object.entries(t).sort((p, q) => q[1] - p[1])[0][0] : null;
+    n.channels = t ? Object.keys(t) : [];
     const old = state.byId.get(n.id);
     if (old) { const recolored = old.channel !== n.channel; Object.assign(old, n); if (recolored) recolor(old); }
     else state.byId.set(n.id, n);
