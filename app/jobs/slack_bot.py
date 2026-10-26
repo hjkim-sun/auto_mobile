@@ -32,12 +32,13 @@ logger = logging.getLogger(__name__)
 
 
 def dm_channel() -> str:
-    owner = get_settings().slack_owner_user_id
+    # 앱을 다시 설치하면 봇 계정이 바뀌고 DM 채널도 바뀐다
+    pair = [get_settings().slack_owner_user_id, slack.bot_user_id()]
     channel = buzz_state.get("slack_dm_channel")
-    if buzz_state.get("slack_dm_owner") != owner or not channel:
-        channel = slack.open_dm(owner)
+    if buzz_state.get("slack_dm_owner") != pair or not channel:
+        channel = slack.open_dm(pair[0])
         buzz_state.put("slack_dm_channel", channel)
-        buzz_state.put("slack_dm_owner", owner)
+        buzz_state.put("slack_dm_owner", pair)
         logger.info("opened DM channel %s with owner", channel)
     return channel
 
