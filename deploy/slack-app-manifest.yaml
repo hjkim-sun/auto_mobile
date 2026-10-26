@@ -1,14 +1,14 @@
 # Slack 앱 매니페스트. api.slack.com/apps → Create New App → From a manifest 에 붙여 넣는다.
 # 봇은 Socket Mode 로 이벤트를 받으므로 Request URL 이 없다 (app/jobs/slack_bot.py).
 display_information:
-  name: auto_mobile
+  name: Jarvis
   description: 문자·메일·통화 알림과 개인 비서
 features:
   app_home:
     messages_tab_enabled: true
     messages_tab_read_only_enabled: false
   bot_user:
-    display_name: auto_mobile
+    display_name: Jarvis
     always_online: true
 oauth_config:
   scopes:
