@@ -181,12 +181,13 @@ SLACK_APP_TOKEN=xapp-…            # Basic Information → App-Level Tokens (co
 SLACK_OWNER_USER_ID=U…            # 주인의 멤버 ID (프로필 ⋮ → 멤버 ID 복사)
 SLACK_NOTIFY_CHANNEL=C…           # 알림을 보낼 채널 ID. 비우면 주인과의 DM
 SLACK_LISTEN_CHANNELS='["C…"]'    # 멘션 없이도 주인의 말에 답하는 채널
-SLACK_BOT_NAME=auto_mobile        # 에이전트가 아는 자기 이름 (prompts/agent.md 의 {bot_name})
+SLACK_BOT_NAME=Jarvis             # 에이전트가 아는 자기 이름 (prompts/agent.md 의 {bot_name})
 ```
 
-- 앱은 `deploy/slack-app-manifest.yaml` 로 만든다(api.slack.com/apps → Create New App → From a manifest). 워크스페이스에 설치하고, 알림·듣는 채널에 봇을 `/invite @auto_mobile` 로 넣는다.
+- 앱은 `deploy/slack-app-manifest.yaml` 로 만든다(api.slack.com/apps → Create New App → From a manifest). 워크스페이스에 설치하고, 알림·듣는 채널에 봇을 넣는다(채널 세부정보 → 앱 → 추가. 사용자 초대 화면에서는 봇이 검색되지 않는다).
+- 앱 표시 이름을 바꾸면 Reinstall 로는 봇 계정 이름이 안 바뀐다. 앱을 제거하고 다시 설치하면 봇 계정과 `xoxb` 토큰이 새로 생기므로 `.env` 를 고치고 채널에 다시 넣는다.
 - systemd 서비스는 `deploy/auto-mobile-slack.service` 다. `python -m app.jobs.slack_bot --whoami` 로 토큰을 확인한다.
-- 답하는 규칙은 Buzz 봇과 같다: 주인의 DM, 다른 채널의 `@auto_mobile` 멘션(스레드로 답), 듣는 채널에서 주인의 말. 답은 Slack 의 `markdown` 블록으로 보내 에이전트의 Markdown 이 그대로 보인다.
+- 답하는 규칙은 Buzz 봇과 같다: 주인의 DM, 다른 채널의 `@Jarvis` 멘션(스레드로 답), 듣는 채널에서 주인의 말. 답은 Slack 의 `markdown` 블록으로 보내 에이전트의 Markdown 이 그대로 보인다.
 - 채널에서는 최근 대화 10건(스레드 안이면 그 스레드)을 맥락으로 함께 넘긴다. 답을 만드는 동안 👀 반응을 단다.
 
 ## Buzz 봇
