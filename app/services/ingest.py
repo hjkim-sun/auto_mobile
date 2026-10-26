@@ -19,7 +19,7 @@ from uuid import uuid4
 
 from app.core.config import get_settings
 from app.repositories import call_briefs, events
-from app.services.email_parse import date_text, write_parsed
+from app.services.email_parse import date_text, save_attachments, write_parsed
 
 log = logging.getLogger(__name__)
 
@@ -302,4 +302,7 @@ def _store_email(tmp: Path, size: int, sha: str, account: str, sent: bool = Fals
                "subject": str(mail.get("Subject") or ""), "date": str(mail.get("Date") or ""),
                "size": size, "sha256": sha}
     # 내가 보낸 메일은 판별하지 않고 바로 kept 로 넣는다. 위키 맥락으로만 쓰고 Buzz 로 알리지 않는다.
+    # 첨부도 내가 보낸 것이라 바로 꺼낸다. 받은 메일은 워커가 kept 로 판별한 뒤에 꺼낸다
+    if sent:
+        save_attachments(path)
     return _register("email", key, payload, path, status="kept" if sent else "pending")

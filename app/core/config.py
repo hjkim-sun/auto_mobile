@@ -164,6 +164,11 @@ class Settings(BaseSettings):
         return self.data_dir / "raw"
 
     @property
+    def attachments_dir(self) -> Path:
+        # kept 메일의 첨부를 풀어 두는 곳. Buzz 에이전트가 --add-dir 로 읽는다
+        return self.data_dir / "attachments"
+
+    @property
     def db_path(self) -> Path:
         return self.data_dir / "events.db"
 

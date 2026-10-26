@@ -6,6 +6,11 @@ keep_question = "relevance"
 keep_choice = "useful"
 # threshold = 0.3   # 생략하면 .env 의 JEV_KEEP_THRESHOLD
 
+# 피싱·사기 확률이 reject_threshold 이상이면 useful 이라도 discarded. kept 메일만 첨부를 꺼내 에이전트가 읽으므로 걸러야 한다.
+reject_question = "safety"
+reject_choice = "phishing"
+reject_threshold = 0.5
+
 [questions.relevance]
 type = "choice"
 instructions = """받은편지함에 들어온 메일 한 통이다. 사용자가 직접 읽거나 알아야 하는 메일인가?
@@ -14,3 +19,14 @@ instructions = """받은편지함에 들어온 메일 한 통이다. 사용자�
 [questions.relevance.criteria]
 useful = "사람이 직접 보낸 업무·개인 메일, 회신이나 조치를 요청하는 메일, 회의·일정 초대, 결제·청구·환불·계약·세금 안내, 예약·배송 확인, 새 기기 로그인·비밀번호 변경 같은 계정 보안 알림, 마감이 있는 기관·학교·금융사 안내"
 noise = "광고·프로모션·할인 쿠폰, 뉴스레터, 웨비나·행사 홍보, 이용약관·개인정보처리방침 개정 같은 전체 공지, SNS·커뮤니티 활동 알림, 인증번호, 설문 요청"
+
+[questions.safety]
+type = "choice"
+instructions = """같은 메일이 피싱·사기·악성 메일인지 판단한다. 첨부파일은 이 판단을 통과한 메일만 열어 보므로 의심스러우면 phishing 으로 본다.
+보낸 사람 표시 이름과 실제 주소의 도메인이 맞는지, 회신 주소(Reply-To)·반송 주소가 보낸 사람과 다른 곳인지,
+인증 결과(SPF·DKIM·DMARC)가 fail 인지, 본문 링크의 도메인이 사칭하는 기관의 공식 도메인과 다른지(비슷한 철자, 단축 URL, IP 주소)를 본다.
+공식 기관·회사 이름을 내세워도 위 근거가 어긋나면 phishing 이다. 평범한 광고 메일은 phishing 이 아니라 safe 다."""
+
+[questions.safety.criteria]
+safe = "보낸 사람 주소·도메인·링크가 내용과 맞는 정상 메일. 아는 사람이나 실제 거래처가 보낸 메일, 공식 도메인에서 온 결제·배송·보안 알림, 평범한 광고·뉴스레터"
+phishing = "계정 정지·해지·용량 초과·비밀번호 만료를 내세워 링크로 로그인이나 개인정보·카드번호 입력을 요구하는 메일, 택배·세금·벌금·환급·미납을 핑계로 링크나 첨부를 열게 하는 메일, 모르는 사람이 보낸 청구서·송장·견적서·발주서 첨부, 실행파일(exe, scr, js, vbs, bat)·압축파일·매크로 문서·HTML 첨부를 열게 하는 메일, 당첨·상금·유산·투자 수익·가상자산을 약속하는 메일, 지인이나 상사를 사칭해 송금·상품권 구매·급한 부탁을 하는 메일, 보낸 사람 표시와 실제 주소 도메인이 다르거나 회신 주소가 엉뚱한 곳인 메일, 협박·몸캠·해킹했다고 주장하며 돈을 요구하는 메일"

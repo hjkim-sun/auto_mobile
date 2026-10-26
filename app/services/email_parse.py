@@ -1,4 +1,7 @@
-"""원본 .eml 을 사람이 읽을 수 있는 dict 로 푼다. 수신 시 .eml 옆에 같은 이름의 .json 으로 저장한다."""
+"""원본 .eml 을 사람이 읽을 수 있는 dict 로 푼다. 수신 시 .eml 옆에 같은 이름의 .json 으로 저장한다.
+
+첨부는 .eml 안에만 두고, kept 로 판별된 메일만 save_attachments 로 ATTACHMENTS 폴더에 꺼낸다.
+"""
 from __future__ import annotations
 
 import json
@@ -21,6 +24,10 @@ def parse_email(path: Path) -> dict:
         "from": str(mail.get("From") or ""),
         "to": str(mail.get("To") or ""),
         "cc": str(mail.get("Cc") or ""),
+        # 피싱 판별에 쓴다: 회신·반송 주소가 보낸 사람과 다른지, SPF·DKIM·DMARC 결과
+        "reply_to": str(mail.get("Reply-To") or ""),
+        "return_path": str(mail.get("Return-Path") or ""),
+        "auth": " ".join(str(mail.get("Authentication-Results") or "").split())[:500],
         "subject": str(mail.get("Subject") or ""),
         "date": str(mail.get("Date") or ""),
         "date_text": date_text(mail.get("Date")),
@@ -31,6 +38,44 @@ def parse_email(path: Path) -> dict:
             for part in mail.iter_attachments()
         ],
     }
+
+
+def attachment_dir(eml_path: Path) -> Path:
+    """emails/YYYYMMDD/{sha16}.eml → ATTACHMENTS/emails/YYYYMMDD/{sha16}/"""
+    return get_settings().attachments_dir / "emails" / eml_path.parent.name / eml_path.stem
+
+
+def _file_name(name: str | None, index: int, used: set[str]) -> str:
+    name = re.sub(r'[\x00-\x1f/\\:*?"<>|]', "_", Path(name or "").name).strip(" .") or f"attachment-{index}"
+    if name in used:
+        name = f"{index}-{name}"
+    used.add(name)
+    return name
+
+
+def save_attachments(eml_path: Path) -> list[Path]:
+    """첨부를 attachment_dir 에 꺼낸다. 이미 꺼냈으면 그대로 둔다."""
+    out = attachment_dir(eml_path)
+    if out.is_dir():
+        return sorted(out.iterdir())
+    with eml_path.open("rb") as f:
+        mail = BytesParser(policy=policy.default).parse(f)
+    parts = [(part.get_filename(), part.get_payload(decode=True)) for part in mail.iter_attachments()]
+    parts = [(name, data) for name, data in parts if data]
+    if not parts:
+        return []
+    tmp = out.with_name(out.name + ".tmp")
+    tmp.mkdir(parents=True, exist_ok=True)
+    used: set[str] = set()
+    for i, (name, data) in enumerate(parts, 1):
+        (tmp / _file_name(name, i, used)).write_bytes(data)
+    tmp.replace(out)
+    return sorted(out.iterdir())
+
+
+def saved_attachments(eml_path: Path) -> list[Path]:
+    out = attachment_dir(eml_path)
+    return sorted(out.iterdir()) if out.is_dir() else []
 
 
 def parsed_path(eml_path: Path) -> Path:

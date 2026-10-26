@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 from contextlib import closing
 
+from pathlib import Path
+
 import httpx
 import pytest
 
 from app.core.config import get_settings
 from app.db.session import connect
 from app.jobs.worker import run
-from app.services import jev
+from app.services import agent_tools, jev
 
 AD = {"kind": "mms", "id": 1, "from": "01087654321", "date": 1792247679, "text": "(광고) 분양 마감 이벤트"}
 PERSONAL = {"kind": "sms", "id": 2, "from": "01012345678", "date": 1792247764000, "text": "안녕하세요 홍길동입니다"}
@@ -20,7 +22,8 @@ IMAGE_ONLY = {"kind": "mms", "id": 3, "from": "01012345678", "date": 1792247679,
 def jev_answer(useful):
     return {"model": "jev-1.13.0",
             "answers": {"relevance": {"type": "choice", "choice": "useful" if useful >= 0.5 else "noise",
-                                      "probabilities": {"useful": useful, "noise": 1 - useful}}},
+                                      "probabilities": {"useful": useful, "noise": 1 - useful}},
+                        "safety": {"probabilities": {"phishing": 0.0, "safe": 1.0}}},
             "usage": {"input_tokens": 10, "output_tokens": 1}}
 
 
@@ -218,3 +221,37 @@ def test_ingested_call_waits_for_transcription_thread(client, fake_jev):
             break
         time.sleep(0.1)
     assert events.get(event_id)["status"] == "pending"
+
+
+def email_jev(useful, phishing):
+    return {"model": "jev-1.14.0", "answers": {
+        "relevance": {"probabilities": {"useful": useful, "noise": 1 - useful}},
+        "safety": {"probabilities": {"phishing": phishing, "safe": 1 - phishing}}}}
+
+
+def test_phishing_mail_is_discarded_and_only_kept_mail_attachments_are_saved(client, monkeypatch):
+    from tests.test_email_parse import multipart_mail
+
+    def classify(state, questions):
+        assert set(questions) == {"relevance", "safety"}
+        return email_jev(0.9, 0.8 if "phish.example" in state else 0.1)
+
+    monkeypatch.setattr(jev, "classify", classify)
+    good = multipart_mail()
+    bad = multipart_mail().replace(b"q-1@example.com", b"q-2@example.com").replace(b"hong@example.com",
+                                                                                   b"hong@phish.example")
+    client.post("/v1/ingest/emails?account=naver", content=good)
+    client.post("/v1/ingest/emails?account=naver", content=bad)
+    run(once=True)
+
+    result = rows()
+    kept, phish = result["email:<q-1@example.com>"], result["email:<q-2@example.com>"]
+    assert kept["status"] == "kept" and json.loads(kept["verdict"])["risk"] == 0.1
+    # useful 0.9 라도 피싱 확률이 reject_threshold(0.5) 이상이면 버린다
+    assert phish["status"] == "discarded" and json.loads(phish["verdict"])["risk"] == 0.8
+    saved = list((get_settings().attachments_dir / "emails").rglob("*.pdf"))
+    assert [p.read_bytes() for p in saved] == [b"%PDF-1.4 fake"]
+    assert saved[0].parent.name == Path(kept["raw_path"]).stem
+    note = agent_tools.get_event(kept["id"])
+    assert f"첨부 파일 (Read 로 열어 본다):\n- {saved[0].resolve()}" in note
+    assert "첨부 파일" not in agent_tools.get_event(phish["id"])

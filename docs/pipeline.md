@@ -56,7 +56,7 @@ sequenceDiagram
     loop 5분마다 (MAIL_POLL_SECONDS)
         M->>N: 받은편지함(INBOX)과 보낸메일함(LIST 의 \\Sent)을 차례로<br/>읽기 전용 SELECT, 메일함마다 커서 이후 UID 검색
         N-->>M: 새 메일 원본 (BODY.PEEK, 읽음 처리 안 함)
-        M->>S: data/raw/emails/YYYYMMDD/*.eml 원본과 파싱한 *.json 저장,<br/>events 행 추가 (source=email, pending). 보낸메일함이면 payload.sent=true 로<br/>판별 없이 바로 kept (위키에만 들어가고 Buzz 알림 없음). Message-ID 가 이미 있으면 건너뜀
+        M->>S: data/raw/emails/YYYYMMDD/*.eml 원본과 파싱한 *.json 저장,<br/>events 행 추가 (source=email, pending). 보낸메일함이면 payload.sent=true 로<br/>판별 없이 바로 kept (위키에만 들어가고 Buzz 알림 없음, 첨부는 바로 꺼냄). Message-ID 가 이미 있으면 건너뜀
         M->>S: mail_cursors 에 메일함별 마지막 UID 기록
     end
 
@@ -75,8 +75,11 @@ sequenceDiagram
         else 텍스트 있음
             W->>W: 프롬프트 읽기 (prompts/{source}.toml)
             W->>J: POST /v1/systemone {state, questions}
-            J-->>W: useful 확률
-            W->>S: threshold 이상이면 kept, 미만이면 discarded
+            J-->>W: useful 확률 (메일은 피싱·사기 확률 safety.phishing 도 함께)
+            W->>S: threshold 이상이면 kept, 미만이면 discarded<br/>메일은 피싱 확률이 reject_threshold(0.5) 이상이면 useful 이라도 discarded
+        end
+        opt kept 메일 (보낸메일함 메일은 수신 때 바로)
+            W->>S: 첨부를 data/attachments/emails/YYYYMMDD/{sha16}/ 로 꺼냄 (kept 로 적기 전에)<br/>discarded 메일의 첨부는 .eml 안에만 남음
         end
     end
     Note over W,J: Jev 호출이 실패하면 pending으로 되돌려 재시도하고<br/>5회를 넘기면 failed로 둔다

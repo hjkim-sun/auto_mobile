@@ -62,3 +62,23 @@ def test_render_parses_mail_received_before_json_existed(client):
     eml.with_suffix(".json").unlink()
     assert "견적서 확인 부탁드립니다." in render_email({"account": "naver"}, eml)
     assert eml.with_suffix(".json").exists()
+
+
+def test_save_attachments_sanitizes_names_and_is_idempotent(tmp_path):
+    from app.services.email_parse import attachment_dir, save_attachments, saved_attachments
+    mail = EmailMessage()
+    mail["Subject"] = "x"
+    mail.set_content("본문")
+    mail.add_attachment(b"a", maintype="text", subtype="plain", filename="../../evil.txt")
+    mail.add_attachment(b"b", maintype="text", subtype="plain", filename="evil.txt")
+    mail.add_attachment(b"c", maintype="application", subtype="octet-stream")
+    eml = tmp_path / "20261020" / "abc.eml"
+    eml.parent.mkdir()
+    eml.write_bytes(bytes(mail))
+    assert saved_attachments(eml) == []
+    saved = save_attachments(eml)
+    out = attachment_dir(eml)
+    assert out == get_settings().attachments_dir / "emails" / "20261020" / "abc"
+    assert sorted(p.name for p in saved) == ["2-evil.txt", "attachment-3", "evil.txt"]
+    assert all(p.parent == out for p in saved)
+    assert save_attachments(eml) == saved == saved_attachments(eml)

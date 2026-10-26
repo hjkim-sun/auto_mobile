@@ -98,6 +98,10 @@ def render_email(payload: dict, path: Path) -> str:
         f"제목: {mail['subject']}",
         f"날짜: {mail['date_text'] or mail['date']}",
     ]
+    # 피싱 판별용 헤더. 이 기능 전에 저장한 .json 에는 없다
+    for label, key in (("회신 주소", "reply_to"), ("반송 주소", "return_path"), ("인증 결과", "auth")):
+        if mail.get(key):
+            lines.append(f"{label}: {mail[key]}")
     if mail["attachments"]:
         lines.append("첨부: " + ", ".join(f"{a['content_type']} {a['filename'] or ''}".strip()
                                           for a in mail["attachments"]))

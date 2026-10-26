@@ -16,5 +16,12 @@ def classify_event(event: sqlite3.Row) -> tuple[str, dict]:
     result = jev.classify(state, prompt.questions)
     useful = result["answers"][prompt.keep_question]["probabilities"][prompt.keep_choice]
     status = "kept" if useful >= prompt.threshold else "discarded"
-    return status, {"useful": useful, "prompt": prompt.name, "model": result.get("model"),
-                    "answers": result["answers"], "usage": result.get("usage")}
+    verdict = {"useful": useful, "prompt": prompt.name, "model": result.get("model"),
+               "answers": result["answers"], "usage": result.get("usage")}
+    if prompt.reject_question:
+        # 피싱·사기처럼 쓸모 있어 보여도 남기면 안 되는 것은 따로 묻고 거른다.
+        risk = result["answers"][prompt.reject_question]["probabilities"][prompt.reject_choice]
+        verdict["risk"] = risk
+        if risk >= prompt.reject_threshold:
+            status = "discarded"
+    return status, verdict

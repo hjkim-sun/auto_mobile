@@ -5,6 +5,7 @@ import subprocess
 
 import pytest
 
+from app.core.config import get_settings
 from app.db.session import init_db
 from app.jobs import agent_mcp
 from app.repositories import buzz_state, calendar_items, events
@@ -132,3 +133,6 @@ def test_owner_gets_web_and_wiki_write(monkeypatch):
     assert other[other.index("--tools") + 1] == "Read,Glob,Grep" and "--permission-mode" not in other
     assert json.loads(other[other.index("--mcp-config") + 1])["mcpServers"]["auto_mobile"]["env"] == {
         agent_tools.AGENT_OWNER_ENV: "0"}
+    # 메일 첨부 폴더는 주인 여부와 상관없이 읽게 한다
+    attachments = str(get_settings().attachments_dir.resolve())
+    assert owner[owner.index("--add-dir") + 1] == attachments == other[other.index("--add-dir") + 1]

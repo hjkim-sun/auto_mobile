@@ -3,6 +3,7 @@
 카톡 알림은 방 CSV 에 넣고(status=filed) 방 단위 판단(app/services/kakao_judge.py)에 맡긴다.
 방 단위 판단은 이 프로세스의 스레드 하나가 KAKAO_JUDGE_POLL_SECONDS 마다 돌린다. 방을 모르는 알림만 하나씩 판별한다.
 전화 수신 브리핑도 스레드 하나가 BRIEF_REFRESH_SECONDS 마다 새 대화가 들어온 사람만 다시 요약한다(app/services/call_brief.py).
+kept 로 판별된 메일은 첨부를 data/attachments/ 로 꺼낸다(Buzz 에이전트가 읽는다).
 반드시 1개 프로세스만 띄운다.
 실행: python -m app.jobs.worker [--once]
 """
@@ -17,7 +18,7 @@ import time
 from app.core.config import get_settings
 from app.db.session import init_db
 from app.repositories import call_briefs, events
-from app.services import call_brief, kakao_history, kakao_judge
+from app.services import call_brief, email_parse, kakao_history, kakao_judge
 from app.services.classify import classify_event
 
 logger = logging.getLogger(__name__)
@@ -80,9 +81,20 @@ def run(once: bool = False) -> None:
             else:
                 events.retry_later(event["id"], repr(e), delay=min(60 * 2 ** event["attempts"], 3600))
             continue
+        if status == "kept" and event["source"] == "email":
+            save_email_attachments(event)   # kept 로 적기 전에 꺼내 둬야 Buzz 브리핑이 첨부를 본다
         events.finish(event["id"], status, verdict)
         logger.info("event %d %s → %s (useful=%s)", event["id"], event["source"], status,
                     verdict.get("useful", "-"))
+
+
+def save_email_attachments(event) -> None:
+    """kept 메일의 첨부만 꺼내 둔다. 피싱으로 걸러진 메일(discarded)의 첨부는 .eml 안에만 남는다."""
+    try:
+        if saved := email_parse.save_attachments(get_settings().data_dir / event["raw_path"]):
+            logger.info("event %d: saved %d attachments", event["id"], len(saved))
+    except Exception:
+        logger.exception("event %d: saving attachments failed", event["id"])
 
 
 def main() -> int:

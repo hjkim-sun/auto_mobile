@@ -1,6 +1,7 @@
 """Buzz 에이전트. 명령이 아닌 말을 VPS 의 Claude Code(헤드리스)에 넘겨 답을 받는다.
 
-claude 는 위키 디렉토리에서 --restricted 로 띄운다. Bash 가 없고, 파일 도구는 위키 안만 다룬다.
+claude 는 위키 디렉토리에서 --restricted 로 띄운다. Bash 가 없고, 파일 도구는 위키와 메일 첨부 폴더(--add-dir) 안만 다룬다.
+첨부는 Jev 가 kept(피싱 아님)로 판별한 메일 것만 꺼내 두므로, 브리핑과 모든 대화에서 읽게 한다.
 원본 이벤트와 캘린더는 MCP 서버(app/jobs/agent_mcp.py)의 도구로만 다룬다. 규칙은 prompts/agent.md.
 주인과의 대화에서는 개인 비서로 일한다: 웹 검색·조회, 위키 쓰기, 캘린더 넣기·지우기를 준다. 위키를 고쳤으면 git 에 남긴다.
 다른 에이전트와의 대화와 새 자료 브리핑은 읽기만 한다. 자료나 남의 말에 적힌 지시로 쓰기나 바깥 요청을 하지 않게 하려는 것이다.
@@ -62,6 +63,7 @@ def _run(session_id: str | None, resume: bool, text: str, owner: bool = False) -
     cmd = [str(s.wiki_claude_path), "-p", "--restricted", "--strict-mcp-config", "--mcp-config", mcp_config(owner),
            "--tools", OWNER_TOOLS if owner else TOOLS, "--permission-prompts", "none",
            "--allowedTools", "mcp__auto_mobile,WebSearch,WebFetch" if owner else "mcp__auto_mobile",
+           "--add-dir", str(s.attachments_dir.resolve()),
            "--output-format", "json", "--model", s.agent_model, "--append-system-prompt", rules]
     if owner:
         cmd += ["--permission-mode", "acceptEdits"]
@@ -70,6 +72,7 @@ def _run(session_id: str | None, resume: bool, text: str, owner: bool = False) -
     else:
         cmd += ["--resume", session_id] if resume else ["--session-id", session_id]
     wiki.ensure_wiki()
+    s.attachments_dir.mkdir(parents=True, exist_ok=True)
     try:
         proc = subprocess.run(cmd, input=text, cwd=s.wiki_dir.resolve(), capture_output=True, text=True,
                               timeout=s.agent_timeout_seconds)
@@ -107,7 +110,7 @@ def brief_prompt(rows: list[sqlite3.Row]) -> str:
         text = bot.body(row).strip()
         if len(text) > BRIEF_CHARS:
             text = text[:BRIEF_CHARS] + "\n…(잘림, get_event 로 전체를 본다)"
-        parts += [f"=== {bot.summary_line(row)}", text, ""]
+        parts += [f"=== {bot.summary_line(row)}", text + agent_tools.attachment_note(row), ""]
     return "\n".join(parts)
 
 

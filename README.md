@@ -144,6 +144,9 @@ Caddy 를 거친 요청(X-Forwarded-For 가 붙은 요청)에는 404 를 준다.
 | `prompts/call.toml` | 통화녹음 전사 |
 
 `questions.<keep_question>` 의 `<keep_choice>` 확률이 `threshold`(생략하면 `JEV_KEEP_THRESHOLD`) 이상이면 `kept`.
+`reject_question` 을 두면 그 질문의 `<reject_choice>` 확률이 `reject_threshold`(기본 0.5) 이상일 때 useful 과 상관없이 `discarded` 다(verdict 의 `risk`).
+메일(`email.toml`)은 `safety` 질문으로 피싱·사기 메일을 거른다. 회신·반송 주소, SPF·DKIM·DMARC 인증 결과, 링크 도메인, 첨부 종류를 근거로 본다.
+`kept` 메일의 첨부만 `attachments/emails/` 로 꺼내 Buzz 에이전트가 읽게 한다(보낸메일함 메일은 판별 없이 바로 꺼낸다).
 파일은 판별할 때마다 읽으므로 고친 뒤 재시작하지 않아도 된다. 파일이 없거나 형식이 틀리면 그 이벤트는 재시도 대기로 남는다.
 통화녹음은 `transcribing` 상태로 들어와 워커가 꺼내지 않는다. 전사 스레드가 끝나면 `pending` 으로 바뀌고, 워커가 파일명과 전사문으로 판별한다.
 전사가 실패해도 `pending` 으로 바꾸며, 이때는 Jev 없이 `kept`(`no_text`)로 남긴다.
@@ -196,7 +199,7 @@ BUZZ_NOTIFY_CHANNEL=<채널 UUID>    # 알림을 보낼 채널. 비우면 DM 으
 
 - DM 에서 명령이 아닌 말, 그리고 봇이 멤버인 채널에서 `@봇이름`(`BUZZ_BOT_NAME`)으로 멘션한 말에 답한다. 채널에서는 그 메시지의 스레드로 답하고, 채널의 최근 대화 10건을 맥락으로 함께 넘긴다.
 - 답을 만드는 동안 받은 메시지에 👀 반응을 단다. 에이전트는 별도 스레드에서 돌아 알림이 밀리지 않는다.
-- `app/services/agent.py` 가 `claude -p --restricted` 를 위키 디렉토리에서 띄운다. Bash 가 없고 파일 도구는 위키 안만 다룬다. 원본 이벤트와 캘린더는 MCP 서버 `app/jobs/agent_mcp.py` 의 도구(`search_events`, `get_event`, `upcoming_calendar`, `pending_calendar`, `status_counts`)로만 다룬다.
+- `app/services/agent.py` 가 `claude -p --restricted` 를 위키 디렉토리에서 띄운다. Bash 가 없고 파일 도구는 위키와 메일 첨부 폴더(`--add-dir data/attachments`) 안만 다룬다. 첨부는 `get_event` 와 새 자료 브리핑에 경로가 붙고, 주인 여부와 상관없이 Read 로 연다(PDF, 이미지 등). 원본 이벤트와 캘린더는 MCP 서버 `app/jobs/agent_mcp.py` 의 도구(`search_events`, `get_event`, `upcoming_calendar`, `pending_calendar`, `status_counts`)로만 다룬다.
 - 주인과의 대화에서는 개인 비서로 일한다. 웹 검색·조회(`WebSearch`, `WebFetch`)로 조사하고, 위키를 쓰고(`Write`, `Edit`, 조사 결과는 `research/`), 캘린더에 일정을 넣고 지운다(`add_calendar`, `decide_calendar`, `remove_calendar`). 위키를 고쳤으면 위키 git 에 `agent: 주인 요청` 으로 남긴다.
 - 다른 에이전트와의 대화와 새 자료 브리핑에서는 이 쓰기·웹 도구를 주지 않는다(MCP 서버도 `AUTO_MOBILE_AGENT_OWNER=0` 이면 캘린더 쓰기 도구를 숨긴다). 자료나 남의 말에 적힌 지시로 쓰기나 바깥 요청을 하지 않게 하려는 것이다. 규칙은 `prompts/agent.md`.
 - 대화 맥락은 채널마다 claude 세션 하나로 이어 간다. `AGENT_SESSION_HOURS`(기본 6) 동안 말이 없거나 `새대화` 라고 하면 새 세션을 연다.
@@ -298,6 +301,7 @@ JSON API 는 그 쿠키나 `Authorization: Bearer <WEB_TOKEN>` 으로 연다. `I
 data/
   events.db
   wiki/                   LLM 위키 (아래 "LLM 위키")
+  attachments/emails/YYYYMMDD/{sha256 앞 16자}/{첨부}   kept 메일의 첨부. .eml 과 같은 날짜 폴더·이름
   raw/
     calls/YYYYMMDD/{sha256 앞 12자}_{파일명}      YYYYMMDD 는 파일명 속 녹음 시각(…_yyMMdd_HHmmss) 기준, 없으면 받은 날
     messages/YYYYMMDD/{sms|mms}-{id}.json     YYYYMMDD 는 문자 자체의 date 기준 (한국 시간)

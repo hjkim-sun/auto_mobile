@@ -1,6 +1,6 @@
 """Buzz 에이전트(app/services/agent.py)가 쓰는 도구. app/jobs/agent_mcp.py 가 MCP 로 내놓는다.
 
-에이전트는 위키(data/wiki)를 파일 도구로 직접 읽고, 원본 이벤트와 캘린더는 이 도구로만 다룬다.
+에이전트는 위키(data/wiki)와 kept 메일의 첨부(data/attachments)를 파일 도구로 직접 읽고, 원본 이벤트와 캘린더는 이 도구로만 다룬다.
 캘린더를 바꾸는 도구(WRITE)는 주인과의 대화에서만 내놓는다(AGENT_OWNER_ENV=1, app/services/agent.py 가 정한다).
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import get_settings
 from app.db.session import connect
 from app.repositories import calendar_items, events
-from app.services import bot, calendar
+from app.services import bot, calendar, email_parse
 
 SOURCES = {"message", "kakao", "email", "call"}
 STATUSES = {"transcribing", "pending", "processing", "kept", "discarded", "failed"}
@@ -57,11 +57,21 @@ def search_events(query: str | None = None, source: str | None = None, status: s
     return "\n".join(f"{bot.summary_line(r)} · {r['status']}" for r in rows)
 
 
+def attachment_note(event) -> str:
+    """kept 메일에서 꺼내 둔 첨부 경로. 에이전트가 Read 로 연다(--add-dir ATTACHMENTS)."""
+    if event["source"] != "email" or not event["raw_path"]:
+        return ""
+    paths = email_parse.saved_attachments(get_settings().data_dir / event["raw_path"])
+    if not paths:
+        return ""
+    return "\n\n첨부 파일 (Read 로 열어 본다):\n" + "\n".join(f"- {p.resolve()}" for p in paths)
+
+
 def get_event(event_id: int) -> str:
     event = events.get(int(event_id))
     if event is None:
         raise ToolError(f"#{event_id} 없음")
-    return f"{bot.summary_line(event)} · {event['status']}\n\n{bot.body(event)}"
+    return f"{bot.summary_line(event)} · {event['status']}\n\n{bot.body(event)}{attachment_note(event)}"
 
 
 def pending_calendar() -> str:
