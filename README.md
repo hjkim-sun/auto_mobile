@@ -170,6 +170,25 @@ MAIL_ACCOUNTS='[{"name": "naver-main", "user": "아이디", "password": "앱 비
   네이버는 UIDVALIDITY 를 항상 0 으로 준다. 그래도 UID 는 계속 늘어나므로 커서는 그대로 동작한다.
 - 인증 실패나 네트워크 오류는 로그만 남기고 다음 주기에 다시 시도한다. 한 계정이 실패해도 다른 계정은 계속 가져온다.
 
+## Slack 봇
+
+Buzz 봇과 같은 일(kept 알림·에이전트 브리핑, 명령, 에이전트 대화)을 Slack 에서 한다. `app/jobs/slack_bot.py` 가 Socket Mode(웹소켓)로 메시지를 받으므로 공개 URL 이나 Caddy 설정이 필요 없다.
+알림은 `SLACK_NOTIFY_SECONDS`(기본 5초)마다 보낸다. 알림 기록(`notifications`, `notify_after_id`)을 Buzz 봇과 같이 쓰므로 둘 중 하나만 띄운다. Buzz 에서 옮기면 이미 알린 것은 다시 알리지 않는다.
+
+```
+SLACK_BOT_TOKEN=xoxb-…            # OAuth & Permissions → Bot User OAuth Token
+SLACK_APP_TOKEN=xapp-…            # Basic Information → App-Level Tokens (connections:write)
+SLACK_OWNER_USER_ID=U…            # 주인의 멤버 ID (프로필 ⋮ → 멤버 ID 복사)
+SLACK_NOTIFY_CHANNEL=C…           # 알림을 보낼 채널 ID. 비우면 주인과의 DM
+SLACK_LISTEN_CHANNELS='["C…"]'    # 멘션 없이도 주인의 말에 답하는 채널
+SLACK_BOT_NAME=auto_mobile        # 에이전트가 아는 자기 이름 (prompts/agent.md 의 {bot_name})
+```
+
+- 앱은 `deploy/slack-app-manifest.yaml` 로 만든다(api.slack.com/apps → Create New App → From a manifest). 워크스페이스에 설치하고, 알림·듣는 채널에 봇을 `/invite @auto_mobile` 로 넣는다.
+- systemd 서비스는 `deploy/auto-mobile-slack.service` 다. `python -m app.jobs.slack_bot --whoami` 로 토큰을 확인한다.
+- 답하는 규칙은 Buzz 봇과 같다: 주인의 DM, 다른 채널의 `@auto_mobile` 멘션(스레드로 답), 듣는 채널에서 주인의 말. 답은 Slack 의 `markdown` 블록으로 보내 에이전트의 Markdown 이 그대로 보인다.
+- 채널에서는 최근 대화 10건(스레드 안이면 그 스레드)을 맥락으로 함께 넘긴다. 답을 만드는 동안 👀 반응을 단다.
+
 ## Buzz 봇
 
 [Buzz](https://github.com/block/buzz)(Block 의 Nostr 기반 메신저)로 kept 판별된 문자·메일·통화를 DM 으로 알리고, DM 명령에 답한다.
@@ -335,6 +354,7 @@ app/
 prompts/                판별 프롬프트 (이벤트 종류별 .toml), 위키 규칙(wiki.md), 에이전트 규칙(agent.md)
   jobs/worker.py        판별 워커
   jobs/mail_poller.py   IMAP 메일 폴러
+  jobs/slack_bot.py     Slack 알림·명령 봇, 에이전트 대화 (Socket Mode)
   jobs/buzz_bot.py      Buzz 알림·명령 봇, 에이전트 대화
   jobs/agent_mcp.py     에이전트용 MCP 서버 (이벤트·캘린더 도구, 캘린더 쓰기는 주인 대화만)
   jobs/wiki_builder.py  LLM 위키 빌더

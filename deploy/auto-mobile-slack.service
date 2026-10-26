@@ -1,0 +1,15 @@
+[Unit]
+Description=auto_mobile Slack notification bot (single instance)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=automan
+Group=automan
+WorkingDirectory=/home/automan/auto_mobile
+ExecStart=/home/automan/auto_mobile/.venv/bin/python -m app.jobs.slack_bot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

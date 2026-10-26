@@ -105,6 +105,19 @@ class Settings(BaseSettings):
     # 알림(kept 이벤트, 캘린더)을 보낼 채널 UUID. 비우면 주인과의 DM 으로 보낸다.
     buzz_notify_channel: str = ""
 
+    # Slack 봇 (app/jobs/slack_bot.py). Socket Mode 라 공개 URL 이 필요 없다. 앱은 deploy/slack-app-manifest.yaml 로 만든다.
+    slack_bot_token: SecretStr = SecretStr("")   # xoxb-…
+    slack_app_token: SecretStr = SecretStr("")   # xapp-… (connections:write)
+    # 알림을 받고 명령을 내릴 사용자 ID(U…). 프로필 ⋮ → "멤버 ID 복사"
+    slack_owner_user_id: str = ""
+    # 알림을 보낼 채널 ID(C…). 비우면 주인과의 DM 으로 보낸다
+    slack_notify_channel: str = ""
+    # 멘션 없이도 주인의 말에 답하는 채널 ID 목록 (JSON)
+    slack_listen_channels: list[str] = []
+    # 에이전트가 자기 이름으로 아는 것. Slack 의 표시 이름은 앱 설정에서 정한다
+    slack_bot_name: str = "auto_mobile"
+    slack_notify_seconds: float = Field(default=5, gt=0)
+
     # LLM 위키 (app/jobs/wiki_builder.py). kept 이벤트를 Claude Code(헤드리스)가 data/wiki 의 마크다운으로 정리한다.
     # 위키 관리 규칙은 WIKI_SCHEMA_PATH. claude 는 로그인돼 있어야 한다(automan 계정의 ~/.claude).
     wiki_claude_path: Path = Path.home() / ".local" / "bin" / "claude"

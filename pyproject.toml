@@ -11,6 +11,7 @@ dependencies = [
     "pydantic-settings>=2.6,<3",
     "sherpa-onnx>=1.12,<2",
     "sherpa-onnx-core>=1.12,<2",
+    "slack-sdk>=3.33,<4",
     "uvicorn[standard]>=0.32,<1",
 ]
 

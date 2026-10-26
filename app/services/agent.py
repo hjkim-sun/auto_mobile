@@ -1,4 +1,4 @@
-"""Buzz 에이전트. 명령이 아닌 말을 VPS 의 Claude Code(헤드리스)에 넘겨 답을 받는다.
+"""메신저(Slack·Buzz) 에이전트. 명령이 아닌 말을 VPS 의 Claude Code(헤드리스)에 넘겨 답을 받는다.
 
 claude 는 위키 디렉토리에서 --restricted 로 띄운다. Bash 가 없고, 파일 도구는 위키와 메일 첨부 폴더(--add-dir) 안만 다룬다.
 첨부는 Jev 가 kept(피싱 아님)로 판별한 메일 것만 꺼내 두므로, 브리핑과 모든 대화에서 읽게 한다.
@@ -57,9 +57,14 @@ def _session(channel: str) -> tuple[str, bool]:
     return str(uuid.uuid4()), False
 
 
+def bot_name() -> str:
+    s = get_settings()
+    return s.slack_bot_name if s.slack_bot_token.get_secret_value() else s.buzz_bot_name
+
+
 def _run(session_id: str | None, resume: bool, text: str, owner: bool = False) -> dict:
     s = get_settings()
-    rules = (REPO / s.agent_prompt_path).read_text(encoding="utf-8").replace("{bot_name}", s.buzz_bot_name)
+    rules = (REPO / s.agent_prompt_path).read_text(encoding="utf-8").replace("{bot_name}", bot_name())
     cmd = [str(s.wiki_claude_path), "-p", "--restricted", "--strict-mcp-config", "--mcp-config", mcp_config(owner),
            "--tools", OWNER_TOOLS if owner else TOOLS, "--permission-prompts", "none",
            "--allowedTools", "mcp__auto_mobile,WebSearch,WebFetch" if owner else "mcp__auto_mobile",

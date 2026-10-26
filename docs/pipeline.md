@@ -16,8 +16,8 @@ sequenceDiagram
     participant S as 저장소<br/>(data/raw, events.db)
     participant W as 워커<br/>(app/jobs/worker.py)
     participant J as Jev<br/>(typesafe.ai)
-    participant B as Buzz 봇<br/>(app/jobs/buzz_bot.py)
-    participant U as 사용자·다른 에이전트<br/>(Buzz 앱 DM·채널, 자체 relay :8443 경유)
+    participant B as Slack 봇<br/>(app/jobs/slack_bot.py, 예전 Buzz 봇과 같은 흐름)
+    participant U as 사용자·다른 에이전트<br/>(Slack DM·채널, Socket Mode)
     participant K as 위키 빌더<br/>(app/jobs/wiki_builder.py)
     participant L as Claude Code<br/>(claude -p, 파일은 data/wiki 안에서만)
     participant G as 네이버 캘린더<br/>(CalDAV)
@@ -107,10 +107,10 @@ sequenceDiagram
     end
     B->>U: 등록한 일정은 calendar_items 알림으로 알리고, ask 는 "넣을까요?"
 
-    Note over S,U: 3. 알림과 명령: Buzz 봇 (5초마다)
-    loop BUZZ_POLL_SECONDS
+    Note over S,U: 3. 알림과 명령: Slack 봇 (알림은 5초마다, 메시지는 Socket Mode 로 바로)
+    loop SLACK_NOTIFY_SECONDS
         B->>S: kept 인데 notifications 에 없는 이벤트 조회
-        B->>U: 브리핑: 에이전트(claude)가 위키에서 맥락을 찾아<br/>비서처럼 정리한 글 + 원문 #번호. 실패하거나 AGENT_BRIEFING=false 면<br/>원문 알림 (요약 + 본문 앞부분). BUZZ_NOTIFY_CHANNEL 채널, 없으면 DM
+        B->>U: 브리핑: 에이전트(claude)가 위키에서 맥락을 찾아<br/>비서처럼 정리한 글 + 원문 #번호. 실패하거나 AGENT_BRIEFING=false 면<br/>원문 알림 (요약 + 본문 앞부분). SLACK_NOTIFY_CHANNEL 채널, 없으면 DM
         B->>S: notifications 에 기록
         U->>B: DM 명령 (오늘, 메일 5, #123 ...)
         B->>S: 조회
