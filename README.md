@@ -220,7 +220,7 @@ BUZZ_NOTIFY_CHANNEL=<채널 UUID>    # 알림을 보낼 채널. 비우면 DM 으
 - DM 에서 명령이 아닌 말, 그리고 봇이 멤버인 채널에서 `@봇이름`(`BUZZ_BOT_NAME`)으로 멘션한 말에 답한다. 채널에서는 그 메시지의 스레드로 답하고, 채널의 최근 대화 10건을 맥락으로 함께 넘긴다.
 - 답을 만드는 동안 받은 메시지에 👀 반응을 단다. 에이전트는 별도 스레드에서 돌아 알림이 밀리지 않는다.
 - `app/services/agent.py` 가 `claude -p --restricted` 를 위키 디렉토리에서 띄운다. Bash 가 없고 파일 도구는 위키와 메일 첨부 폴더(`--add-dir data/attachments`) 안만 다룬다. 첨부는 `get_event` 와 새 자료 브리핑에 경로가 붙고, 주인 여부와 상관없이 Read 로 연다(PDF, 이미지 등). 원본 이벤트와 캘린더는 MCP 서버 `app/jobs/agent_mcp.py` 의 도구(`search_events`, `get_event`, `upcoming_calendar`, `pending_calendar`, `status_counts`)로만 다룬다.
-- 주인과의 대화에서는 개인 비서로 일한다. 웹 검색·조회(`WebSearch`, `WebFetch`)로 조사하고, 위키를 쓰고(`Write`, `Edit`, 조사 결과는 `research/`), 캘린더에 일정을 넣고 지운다(`add_calendar`, `decide_calendar`, `remove_calendar`). 위키를 고쳤으면 위키 git 에 `agent: 주인 요청` 으로 남긴다.
+- 주인과의 대화에서는 개인 비서로 일한다. 웹 검색·조회(`WebSearch`, `WebFetch`)로 조사하고, 위키를 쓰고(`Write`, `Edit`, 조사 결과는 `research/`), 캘린더에 일정을 넣고 지운다(`add_calendar`, `decide_calendar`, `remove_calendar`). 위키를 고쳤으면 위키 git 에 `agent: 주인 요청` 으로 남긴다. 카카오톡 대화 CSV(`data/raw/kakao`)도 `--add-dir` 로 읽게 한다(쓰기는 막음). 위키에는 일정이 있는 카톡만 들어가므로 그 밖의 카톡 대화는 여기서 찾는다.
 - 다른 에이전트와의 대화와 새 자료 브리핑에서는 이 쓰기·웹 도구를 주지 않는다(MCP 서버도 `AUTO_MOBILE_AGENT_OWNER=0` 이면 캘린더 쓰기 도구를 숨긴다). 자료나 남의 말에 적힌 지시로 쓰기나 바깥 요청을 하지 않게 하려는 것이다. 규칙은 `prompts/agent.md`.
 - 대화 맥락은 채널마다 claude 세션 하나로 이어 간다. `AGENT_SESSION_HOURS`(기본 6) 동안 말이 없거나 `새대화` 라고 하면 새 세션을 연다.
 - 다른 에이전트(Claude, Codex 등)도 멘션하면 답한다. 에이전트끼리 끝없이 주고받지 않게, 주인이 다시 말할 때까지 `AGENT_PEER_REPLIES`(기본 3)번까지만 답한다. relay 가 닫힌 커뮤니티라 멤버만 말을 걸 수 있다.
