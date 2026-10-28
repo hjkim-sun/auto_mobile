@@ -6,6 +6,7 @@ claude 는 위키 디렉토리에서 --restricted 로 띄운다. Bash 가 없고
 원본 이벤트와 캘린더는 MCP 서버(app/jobs/agent_mcp.py)의 도구로만 다룬다. 규칙은 prompts/agent.md.
 주인과의 대화에서는 개인 비서로 일한다: 웹 검색·조회, 위키 쓰기, 캘린더 넣기·지우기를 준다. 위키를 고쳤으면 git 에 남긴다.
 다른 에이전트와의 대화와 새 자료 브리핑은 읽기만 한다. 자료나 남의 말에 적힌 지시로 쓰기나 바깥 요청을 하지 않게 하려는 것이다.
+브리핑만은 비서처럼 먼저 알아보고 제안하도록 WebSearch 를 준다. 주소를 여는 WebFetch 는 자료에 적힌 링크로 바깥에 요청하지 않게 주지 않는다.
 대화 맥락은 채널마다 claude 세션 하나로 이어 가고, AGENT_SESSION_HOURS 동안 말이 없으면 새 세션을 연다.
 새로 남긴 자료의 알림(brief)은 대화와 따로 한 번만 돌리는 세션으로 만든다.
 """
@@ -26,6 +27,7 @@ from app.services import agent_tools, bot, kakao_history, wiki
 REPO = Path(__file__).resolve().parents[2]
 TOOLS = "Read,Glob,Grep"
 OWNER_TOOLS = "Read,Glob,Grep,Write,Edit,WebSearch,WebFetch"
+BRIEF_TOOLS = "Read,Glob,Grep,WebSearch"
 BRIEF_CHARS = 3000   # 브리핑에 넣는 자료 하나의 본문 길이. 더 필요하면 에이전트가 get_event 로 본다.
 
 
@@ -63,14 +65,16 @@ def bot_name() -> str:
     return s.slack_bot_name if s.slack_bot_token.get_secret_value() else s.buzz_bot_name
 
 
-def _run(session_id: str | None, resume: bool, text: str, owner: bool = False) -> dict:
+def _run(session_id: str | None, resume: bool, text: str, owner: bool = False, research: bool = False) -> dict:
+    """owner 는 주인과의 대화(쓰기·웹 조회), research 는 새 자료 브리핑(읽기 + 웹 검색)."""
     s = get_settings()
     kakao = kakao_history.kakao_dir().resolve()
     rules = (REPO / s.agent_prompt_path).read_text(encoding="utf-8").replace("{bot_name}", bot_name()) \
         .replace("{kakao_dir}", str(kakao))
     cmd = [str(s.wiki_claude_path), "-p", "--restricted", "--strict-mcp-config", "--mcp-config", mcp_config(owner),
-           "--tools", OWNER_TOOLS if owner else TOOLS, "--permission-prompts", "none",
-           "--allowedTools", "mcp__auto_mobile,WebSearch,WebFetch" if owner else "mcp__auto_mobile",
+           "--tools", OWNER_TOOLS if owner else BRIEF_TOOLS if research else TOOLS, "--permission-prompts", "none",
+           "--allowedTools", "mcp__auto_mobile,WebSearch,WebFetch" if owner
+           else "mcp__auto_mobile,WebSearch" if research else "mcp__auto_mobile",
            "--add-dir", str(s.attachments_dir.resolve()),
            "--output-format", "json", "--model", s.agent_model, "--append-system-prompt", rules]
     if owner:
@@ -126,7 +130,7 @@ def brief_prompt(rows: list[sqlite3.Row]) -> str:
 
 def brief(rows: list[sqlite3.Row]) -> str:
     """kept 이벤트 묶음을 위키 맥락과 함께 비서처럼 알리는 글."""
-    out = _run(None, False, brief_prompt(rows))
+    out = _run(None, False, brief_prompt(rows), research=True)
     result = (out.get("result") or "").strip()
     if not result:
         raise AgentError("empty briefing")

@@ -45,7 +45,7 @@ def test_mcp_lists_and_calls_tools():
 def test_session_continues_until_idle(monkeypatch):
     runs = []
 
-    def fake_run(session_id, resume, text, owner=False):
+    def fake_run(session_id, resume, text, owner=False, research=False):
         runs.append((session_id, resume, owner))
         return {"result": "답", "session_id": session_id}
     monkeypatch.setattr(agent, "_run", fake_run)
@@ -75,8 +75,8 @@ def test_brief_runs_once_without_session(monkeypatch):
     events.finish(event_id, "kept", {"useful": 0.9})
     calls = []
 
-    def fake_run(session_id, resume, text, owner=False):
-        assert owner is False
+    def fake_run(session_id, resume, text, owner=False, research=False):
+        assert owner is False and research is True
         calls.append((session_id, text))
         return {"result": " 브리핑 "}
     monkeypatch.setattr(agent, "_run", fake_run)

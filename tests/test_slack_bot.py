@@ -4,7 +4,7 @@ import pytest
 
 from app.db.session import init_db
 from app.jobs import slack_bot
-from app.repositories import buzz_state, events
+from app.repositories import buzz_state, calendar_items, events
 from app.services import agent, slack
 
 OWNER, BOT, PEER = "U0OWNER", "U0BOT", "U0PEER"
@@ -84,6 +84,19 @@ def test_only_events_after_first_start_are_notified_once(fake_slack):
     assert slack_bot.notify() == 1 and slack_bot.notify() == 0
     channel, text, _ = fake_slack.sent[0]
     assert channel == "D1" and f"#{new}" in text
+
+
+def test_added_calendar_items_are_grouped(fake_slack):
+    slack_bot.notify()
+    ids = [calendar_items.insert({"event_id": 1, "title": title, "start": start, "decision": decision, "reason": "예약"})
+           for title, start, decision in [("항공 출발", "2026-12-16T16:45", "add"), ("호텔 투숙", "2026-12-17", "add"),
+                                          ("저녁 모임", "2026-12-18T19:00", "ask")]]
+    for item_id in ids[:2]:
+        calendar_items.set_status(item_id, "added")
+    assert slack_bot.notify() == 3 and slack_bot.notify() == 0
+    texts = [text for _, text, _ in fake_slack.sent]
+    assert len(texts) == 2 and texts[0].startswith("캘린더에 2건 넣었습니다") and "항공 출발" in texts[0]
+    assert "호텔 투숙" in texts[0] and texts[1].startswith("캘린더에 넣을까요?") and f"등록 {ids[2]}" in texts[1]
 
 
 def test_dm_command_and_agent(fake_slack, replies):

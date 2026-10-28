@@ -116,6 +116,14 @@ def calendar_message(item: sqlite3.Row) -> str:
             f"넣으려면 \"등록 {item['id']}\", 넣지 않으려면 \"안함 {item['id']}\"")
 
 
+def calendar_added_message(items: list[sqlite3.Row]) -> str:
+    """한 번에 넣은 일정 여러 건을 한 메시지로 (예: 여행의 항공·숙소). 한 건이면 calendar_message 와 같다."""
+    if len(items) == 1:
+        return calendar_message(items[0])
+    lines = "\n".join(f"• {calendar_line(item)}" for item in items)
+    return f"캘린더에 {len(items)}건 넣었습니다\n{lines}\n잘못 넣은 것이 있으면 캘린더에서 지워 주세요."
+
+
 def calendar_command(word: str, item_id: int) -> str:
     item = calendar_items.get(item_id)
     if item is None:

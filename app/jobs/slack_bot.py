@@ -62,12 +62,17 @@ def notify() -> int:
             slack.send(channel, bot.notification(event))
             buzz_state.mark_notified(event["id"])
     sent = len(rows)
-    # 위키 빌더가 캘린더에 넣은 일정은 알리고, 애매한 일정은 넣을지 묻는다.
-    for item in calendar_items.unnotified():
-        slack.send(channel, bot.calendar_message(item))
+    # 위키 빌더가 캘린더에 넣은 일정은 한 메시지로 묶어 알리고, 애매한 일정은 건마다 넣을지 묻는다.
+    items = calendar_items.unnotified()
+    added = [item for item in items if item["status"] == "added"]
+    if added:
+        slack.send(channel, bot.calendar_added_message(added))
+    for item in items:
+        if item["status"] != "added":
+            slack.send(channel, bot.calendar_message(item))
+    for item in items:
         calendar_items.mark_notified(item["id"])
-        sent += 1
-    return sent
+    return sent + len(items)
 
 
 def send_briefing(channel: str, rows: list) -> None:

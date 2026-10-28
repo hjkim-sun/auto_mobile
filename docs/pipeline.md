@@ -110,7 +110,7 @@ sequenceDiagram
     Note over S,U: 3. 알림과 명령: Slack 봇 (알림은 5초마다, 메시지는 Socket Mode 로 바로)
     loop SLACK_NOTIFY_SECONDS
         B->>S: kept 인데 notifications 에 없는 이벤트 조회
-        B->>U: 브리핑: 에이전트(claude)가 위키에서 맥락을 찾아<br/>비서처럼 정리한 글 + 원문 #번호. 실패하거나 AGENT_BRIEFING=false 면<br/>원문 알림 (요약 + 본문 앞부분). SLACK_NOTIFY_CHANNEL 채널, 없으면 DM
+        B->>U: 브리핑: 에이전트(claude)가 위키에서 맥락을 찾고 WebSearch 로 필요한 것을 먼저 알아봐<br/>빈틈·마감을 짚고 다음 할 일을 제안하는 글 + 원문 #번호 (WebFetch·쓰기 도구는 없음). 실패하거나 AGENT_BRIEFING=false 면<br/>원문 알림 (요약 + 본문 앞부분). SLACK_NOTIFY_CHANNEL 채널, 없으면 DM
         B->>S: notifications 에 기록
         U->>B: DM 명령 (오늘, 메일 5, #123 ...)
         B->>S: 조회
@@ -133,7 +133,7 @@ sequenceDiagram
         K->>S: wiki_ingests 에 기록, log.md 추가, data/wiki git 커밋,<br/>calendar_items 에 후보 저장
         K->>G: decision=add (확실한 약속, 예약, 마감) 는 바로 등록
     end
-    B->>U: 등록한 일정 알림, decision=ask (참석 여부를 정할 초대 등) 는<br/>"넣을까요? 등록 N / 안함 N"
+    B->>U: 등록한 일정 알림 (한 주기에 넣은 것은 한 메시지로 묶음), decision=ask (참석 여부를 정할 초대 등) 는<br/>"넣을까요? 등록 N / 안함 N"
     U->>B: DM "등록 N"
     B->>G: 일정 등록
     Note over K,L: claude 가 실패하면 고치다 만 파일을 되돌리고<br/>다음 주기에 같은 자료를 다시 넣는다
