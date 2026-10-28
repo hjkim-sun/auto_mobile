@@ -150,6 +150,19 @@ def test_brief_returns_saved_summary_without_claude(client, asked):
     assert "카톡 3<" in body["html"] and "기준" in body["html"]
 
 
+def test_card_shows_source_icons(client, asked, monkeypatch):
+    import time
+    monkeypatch.setattr(call_brief, "summarize", lambda name, conversation: "\n".join([
+        "• [카톡] 내일 7시 강남역 약속", "• [통화] 회의 3시로 변경", "• [문자] 자료 보냄"]))
+    client.post("/v1/ingest/kakao/history", json=history(int(time.time())))
+    call_brief.refresh()
+    body = client.post("/v1/brief/call", params={"name": "홍길동"}).json()
+    assert body["text"] == "• 내일 7시 강남역 약속\n• 회의 3시로 변경\n• 자료 보냄"   # 알림에는 출처를 떼고 보낸다
+    page = body["html"]
+    assert [page.count(f'alt="{s}"') for s in ("카톡", "통화", "문자")] == [1, 1, 1]
+    assert "<span>내일 7시 강남역 약속</span>" in page and "<i>1</i>" not in page
+
+
 def test_refresh_failure_keeps_person_updated(client, monkeypatch):
     def fail(name, conversation):
         raise call_brief.BriefError("timeout")

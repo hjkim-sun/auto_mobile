@@ -11,9 +11,11 @@ BRIEF_DAYS 안의 것만, 문자·카톡은 각각 최근 BRIEF_MAX_MESSAGES 건
 """
 from __future__ import annotations
 
+import base64
 import html
 import json
 import logging
+import re
 import subprocess
 import time
 from contextlib import closing
@@ -170,21 +172,40 @@ def seed() -> int:
     return len(people - {None})
 
 
-CARD = Path(__file__).resolve().parents[1] / "web" / "call_card.html"
+WEB = Path(__file__).resolve().parents[1] / "web"
+CARD = WEB / "call_card.html"
+SOURCE = re.compile(r"^\[(카톡|통화|문자)\]\s*")   # 요약 줄 앞의 출처 (prompts/call_brief.md)
+ICONS = {"카톡": "kakao", "통화": "call", "문자": "sms"}   # app/web/icons/<이름>.png
+
+
+def icon(source: str) -> str:
+    data = base64.b64encode((WEB / "icons" / f"{ICONS[source]}.png").read_bytes()).decode()
+    return f'<img src="data:image/png;base64,{data}" alt="{source}">'
+
+
+def plain(text: str) -> str:
+    """알림 본문용. 요약 줄 앞의 [카톡] 같은 출처를 뗀다."""
+    return re.sub(r"^(• ?)?\[(?:카톡|통화|문자)\][ \t]*", r"\1", text, flags=re.M)
 
 
 def card(who: str, b: dict) -> str:
-    """전화 화면 위에 띄우는 카드(폰 Automate Dialog web 블록의 HTML page). 틀은 app/web/call_card.html."""
+    """전화 화면 위에 띄우는 카드(폰 Automate Dialog web 블록의 HTML page). 틀은 app/web/call_card.html.
+    줄 앞에 출처가 있으면 카톡·통화·문자 아이콘을, 없으면(출처를 붙이기 전에 만든 요약) 번호를 띄운다."""
     if b["summarized_at"]:
         when = datetime.fromisoformat(b["summarized_at"]).astimezone(get_settings().tz)
         when = f"{when:%m.%d %H:%M} 기준"
     else:
         when = "방금 요약"
-    lines = [line.strip().removeprefix("•").strip() for line in b["text"].splitlines()]
-    items = "".join(f"<li><i>{i}</i><span>{html.escape(line)}</span></li>"
-                    for i, line in enumerate(filter(None, lines), 1))
+    lines = filter(None, (line.strip().removeprefix("•").strip() for line in b["text"].splitlines()))
+    items = []
+    for i, line in enumerate(lines, 1):
+        if m := SOURCE.match(line):
+            mark, line = f'<i class="src">{icon(m[1])}</i>', line[m.end():]
+        else:
+            mark = f"<i>{i}</i>"
+        items.append(f"<li>{mark}<span>{html.escape(line)}</span></li>")
     return Template(CARD.read_text(encoding="utf-8")).substitute(
-        initial=html.escape(who[:1]), name=html.escape(who), items=items, when=when,
+        initial=html.escape(who[:1]), name=html.escape(who), items="".join(items), when=when,
         kakao=b["kakao"] or 0, sms=b["sms"] or 0, calls=b["calls"] or 0)
 
 
@@ -207,4 +228,4 @@ def brief(number: str | None, name: str | None) -> dict:
     elapsed = round(time.monotonic() - started, 2)
     logger.info("call brief for %s: cached=%s %.2fs", who, summarized_at is not None, elapsed)
     result = {"title": f"📞 {who}", **b, "elapsed": elapsed, "summarized_at": summarized_at}
-    return result | {"html": card(who, result)}
+    return result | {"text": plain(b["text"]), "html": card(who, result)}
