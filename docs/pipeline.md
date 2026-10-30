@@ -116,6 +116,11 @@ sequenceDiagram
         B->>S: 조회
         B->>U: DM 답장
     end
+    Note over B,U: 3-1. 하루 브리핑: cron 매일 07:30 KST (app/jobs/daily_brief.py, deploy/crontab)
+    B->>S: 오늘·앞으로 3일 캘린더 일정(added·pending), 답을 기다리는 일정(asking), 지난 24시간 kept 자료
+    B->>L: claude -p (읽기 + WebSearch), 위키 schedule.md 와 관련 페이지에서 할 일·준비물·기한을 찾음<br/>규칙 prompts/agent.md '하루 브리핑'
+    L-->>B: 오늘 할 일 위주 브리핑 (실패하면 일정 목록만)
+    B->>U: 알림 채널(없으면 DM)로 하루 한 번 (buzz_state.daily_brief_date)
     U->>B: 명령이 아닌 말 (DM, 듣는 채널의 주인 말, 또는 채널에서 @봇이름 멘션.<br/>다른 에이전트의 멘션은 주인이 다시 말할 때까지 3번까지)
     B->>U: 👀 반응
     B->>L: 에이전트 스레드에서 claude -p --resume (채널마다 세션 하나)<br/>+ 채널 최근 대화 10건, 규칙 prompts/agent.md

@@ -187,6 +187,7 @@ SLACK_BOT_NAME=Jarvis             # 에이전트가 아는 자기 이름 (prompt
 - 앱은 `deploy/slack-app-manifest.yaml` 로 만든다(api.slack.com/apps → Create New App → From a manifest). 워크스페이스에 설치하고, 알림·듣는 채널에 봇을 넣는다(채널 세부정보 → 앱 → 추가. 사용자 초대 화면에서는 봇이 검색되지 않는다).
 - 앱 표시 이름을 바꾸면 Reinstall 로는 봇 계정 이름이 안 바뀐다. 앱을 제거하고 다시 설치하면 봇 계정과 `xoxb` 토큰이 새로 생기므로 `.env` 를 고치고 채널에 다시 넣는다.
 - systemd 서비스는 `deploy/auto-mobile-slack.service` 다. `python -m app.jobs.slack_bot --whoami` 로 토큰을 확인한다.
+- 하루 브리핑: cron 이 매일 07:30(KST) `python -m app.jobs.daily_brief` 를 띄워, 오늘·앞으로 3일 캘린더 일정, 답을 기다리는 일정, 지난 24시간 kept 자료와 위키 `schedule.md` 로 오늘 할 일 위주의 브리핑을 알림 채널(없으면 DM)에 보낸다(`prompts/agent.md` 의 '하루 브리핑'). 에이전트가 실패하면 일정 목록만 보낸다. 하루 한 번만 보낸다(`--force` 로 다시, `--dry-run` 은 출력만). crontab 은 `deploy/crontab`(`crontab deploy/crontab`), 로그는 `data/logs/daily_brief.log`.
 - 답하는 규칙은 Buzz 봇과 같다: 주인의 DM, 다른 채널의 `@Jarvis` 멘션(스레드로 답), 듣는 채널에서 주인의 말. 답은 Slack 의 `markdown` 블록으로 보내 에이전트의 Markdown 이 그대로 보인다.
 - 채널에서는 최근 대화 10건(스레드 안이면 그 스레드)을 맥락으로 함께 넘긴다. 답을 만드는 동안 👀 반응을 단다.
 
@@ -356,6 +357,7 @@ prompts/                판별 프롬프트 (이벤트 종류별 .toml), 위키 
   jobs/worker.py        판별 워커
   jobs/mail_poller.py   IMAP 메일 폴러
   jobs/slack_bot.py     Slack 알림·명령 봇, 에이전트 대화 (Socket Mode)
+  jobs/daily_brief.py   하루 브리핑 (cron)
   jobs/buzz_bot.py      Buzz 알림·명령 봇, 에이전트 대화
   jobs/agent_mcp.py     에이전트용 MCP 서버 (이벤트·캘린더 도구, 캘린더 쓰기는 주인 대화만)
   jobs/wiki_builder.py  LLM 위키 빌더

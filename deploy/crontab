@@ -1,0 +1,3 @@
+# automan 계정 crontab. 설치: crontab deploy/crontab (기존 crontab 을 덮어쓴다. crontab -l 로 먼저 확인)
+# 서버 시간대가 UTC 라 UTC 로 적는다. 22:30 UTC = 다음 날 07:30 KST
+30 22 * * * cd /home/automan/auto_mobile && .venv/bin/python -m app.jobs.daily_brief >> data/logs/daily_brief.log 2>&1
