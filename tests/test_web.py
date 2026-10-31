@@ -80,6 +80,23 @@ def test_page_returns_markdown_and_rejects_paths_outside_wiki(client, wiki_pages
         assert client.get("/wiki/page", params={"path": path}, headers=AUTH).status_code == 404
 
 
+def test_mask_file_replaces_names_on_screen_only(client, wiki_pages):
+    write("people/홍길동.md", "# 홍길동\n\n연락처 01012345678. 결제 11,000원, 1,000원.\n")
+    mask = get_settings().wiki_mask_path
+    mask.write_text('{"pairs": [["홍길동", "김철수"], ["01012345678", "01000000000"], ["1,000원", "○원"]]}',
+                    encoding="utf-8")
+    g = client.get("/wiki/graph", headers=AUTH).json()
+    assert "people/김철수.md" in {n["id"] for n in g["nodes"]}
+    assert f"#{wiki_pages} 문자 김철수" in {n["title"] for n in g["nodes"]}
+    page = client.get("/wiki/page", params={"path": "people/김철수.md"}, headers=AUTH).json()
+    assert page["path"] == "people/김철수.md"
+    assert page["markdown"] == "# 김철수\n\n연락처 01000000000. 결제 11,000원, ○원.\n"
+    # 파일은 그대로 두고, 매핑 파일을 치우면 원래대로 보인다
+    assert (get_settings().wiki_dir / "people/홍길동.md").read_text(encoding="utf-8").startswith("# 홍길동")
+    mask.unlink()
+    assert "people/홍길동.md" in {n["id"] for n in client.get("/wiki/graph", headers=AUTH).json()["nodes"]}
+
+
 def test_flow_stats_follow_an_event_through_each_step(client, wiki_pages):
     noise, _ = events.insert_event("message", "sms-2", {**SMS, "id": 2, "text": "광고"})
     events.finish(noise, "discarded", {"useful": 0.05})

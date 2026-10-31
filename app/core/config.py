@@ -189,6 +189,11 @@ class Settings(BaseSettings):
     def wiki_dir(self) -> Path:
         return self.data_dir / "wiki"
 
+    @property
+    def wiki_mask_path(self) -> Path:
+        # 있으면 위키 화면에 실명·번호 대신 가명을 보낸다 (app/services/wiki_mask.py)
+        return self.data_dir / "wiki_mask.json"
+
 
 @lru_cache
 def get_settings() -> Settings:

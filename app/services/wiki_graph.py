@@ -19,6 +19,7 @@ from urllib.parse import unquote
 
 from app.core.config import get_settings
 from app.db.session import connect
+from app.services import wiki_mask
 
 SKIP = {"index.md", "log.md"}
 TYPES = {"sources": "source", "people": "person", "orgs": "org", "topics": "topic"}
@@ -154,6 +155,11 @@ def _count(values) -> dict:
 
 
 def graph() -> dict:
+    """화면에 보낼 그래프. data/wiki_mask.json 이 있으면 실명을 가명으로 바꾼다."""
+    return wiki_mask.graph(_graph())
+
+
+def _graph() -> dict:
     wiki_dir = get_settings().wiki_dir
     if not wiki_dir.is_dir():
         return {"nodes": [], "links": [], "commits": [], "counts": {}, "source_counts": {}}
@@ -173,16 +179,19 @@ class PageNotFound(LookupError):
 def page(path: str) -> dict:
     """페이지 하나의 마크다운과 그 페이지를 가리키는 페이지 목록. 위키 밖이나 .md 가 아니면 PageNotFound."""
     wiki_dir = get_settings().wiki_dir.resolve()
+    g = _graph()
+    path = wiki_mask.real_path(path, [n["id"] for n in g["nodes"]])
     target = (wiki_dir / path).resolve()
     if (not target.is_relative_to(wiki_dir) or target.suffix != ".md" or ".git" in target.parts
             or not target.is_file()):
         raise PageNotFound(path)
     rel = target.relative_to(wiki_dir).as_posix()
-    g = graph()
     titles = {n["id"]: n["title"] for n in g["nodes"]}
     backlinks = sorted({l["source"] if l["target"] == rel else l["target"]
                         for l in g["links"] if rel in (l["source"], l["target"])})
     text = target.read_text(encoding="utf-8", errors="replace")
-    return {"path": rel, "title": titles.get(rel) or _title_summary(text, target.stem)[0], "type": page_type(rel),
-            "markdown": text, "linked": [{"id": p, "title": titles.get(p, p)} for p in backlinks]}
+    mask = wiki_mask.text
+    return {"path": mask(rel), "title": mask(titles.get(rel) or _title_summary(text, target.stem)[0]),
+            "type": page_type(rel), "markdown": mask(text),
+            "linked": [{"id": mask(p), "title": mask(titles.get(p, p))} for p in backlinks]}
 
